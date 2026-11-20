@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const { supabaseAdmin, supabase } = require('../config/supabase');
 
@@ -9,8 +10,16 @@ const adminAuthMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     const adminKey = req.headers['x-admin-key'];
 
-    // Verificar chave admin (para acesso sem login)
-    if (adminKey === process.env.ADMIN_SECRET_KEY) {
+    // Verificar chave admin (para acesso sem login).
+    // FAIL CLOSED: se ADMIN_SECRET_KEY não estiver definida (ou for curta),
+    // o acesso por chave fica desabilitado. Antes, `undefined === undefined`
+    // liberava /api/admin/* sem login quando a variável não existia.
+    const expectedKey = process.env.ADMIN_SECRET_KEY;
+    if (
+      typeof expectedKey === 'string' && expectedKey.length >= 32 &&
+      typeof adminKey === 'string' && adminKey.length === expectedKey.length &&
+      crypto.timingSafeEqual(Buffer.from(adminKey), Buffer.from(expectedKey))
+    ) {
       req.isAdmin = true;
       return next();
     }

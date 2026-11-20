@@ -123,9 +123,9 @@ CREATE POLICY "Usuarios podem ver sua propria empresa"
     ON empresas FOR SELECT
     USING (id = get_user_empresa_id());
 
-CREATE POLICY "Permitir inserção durante cadastro"
-    ON empresas FOR INSERT
-    WITH CHECK (true);
+-- REMOVIDO (falha de segurança): política de INSERT com WITH CHECK (true)
+-- permitia a qualquer usuário logado vincular-se a outra empresa e ler seus dados.
+-- Empresas/usuários agora só são criados no servidor (service role no cadastro).
 
 -- ============================================
 -- POLÍTICAS RLS: USUARIOS
@@ -134,13 +134,15 @@ CREATE POLICY "Usuarios podem ver usuarios da mesma empresa"
     ON usuarios FOR SELECT
     USING (empresa_id = get_user_empresa_id());
 
-CREATE POLICY "Permitir inserção de usuario durante cadastro"
-    ON usuarios FOR INSERT
-    WITH CHECK (true);
+-- REMOVIDO (falha de segurança): política de INSERT com WITH CHECK (true)
+-- permitia a qualquer usuário logado vincular-se a outra empresa e ler seus dados.
+-- Empresas/usuários agora só são criados no servidor (service role no cadastro).
 
 CREATE POLICY "Usuarios podem atualizar seu proprio perfil"
     ON usuarios FOR UPDATE
-    USING (id = auth.uid());
+    USING (id = auth.uid())
+    -- impede trocar empresa_id/role pelo próprio usuário
+    WITH CHECK (id = auth.uid() AND empresa_id = get_user_empresa_id() AND role = (SELECT u.role FROM usuarios u WHERE u.id = auth.uid()));
 
 -- ============================================
 -- POLÍTICAS RLS: CATEGORIAS
