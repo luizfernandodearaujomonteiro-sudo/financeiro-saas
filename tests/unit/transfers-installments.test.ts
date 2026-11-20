@@ -100,3 +100,12 @@ describe("parcelas com data da compra original", () => {
     expect(slotForDueDate(sameMonth, "2026-11-10")).toEqual({ referenceMonth: "2026-11-01", closingDate: "2026-11-03", dueDate: "2026-11-10" });
   });
 });
+
+describe("mudança de ciclo do cartão", () => {
+  it("slotForReferenceMonth recalcula fechamento/vencimento para o novo ciclo", async () => {
+    const { slotForReferenceMonth } = await import("@/lib/domain/invoices");
+    expect(slotForReferenceMonth({ closingDay: 25, dueDay: 5 }, "2026-12-01")).toEqual({ referenceMonth: "2026-12-01", closingDate: "2026-11-25", dueDate: "2026-12-05" });
+    expect(slotForReferenceMonth({ closingDay: 1, dueDay: 8 }, "2026-12-01")).toEqual({ referenceMonth: "2026-12-01", closingDate: "2026-12-01", dueDate: "2026-12-08" });
+    expect(slotForReferenceMonth({ closingDay: 31, dueDay: 10 }, "2027-03-01").closingDate).toBe("2027-02-28");
+  });
+});

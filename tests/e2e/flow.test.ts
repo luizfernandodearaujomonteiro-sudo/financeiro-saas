@@ -18,7 +18,7 @@ import { assignInvoice, installmentSlot } from "@/lib/domain/invoices";
 import { summarize } from "@/lib/domain/reports";
 import { bancarioBarcodeToLine, buildBancarioBarcode, dateToFactor } from "@/lib/domain/boleto";
 import { createBill, listBills, payBill } from "@/lib/services/bills";
-import { createCard, createCardPurchase, listCards, listInvoices } from "@/lib/services/cards";
+import { createCard, createCardPurchase, listCards, listInvoices, updateCard } from "@/lib/services/cards";
 import { createEntry, listEntriesForMonth } from "@/lib/services/entries";
 import { addContribution, listGoals } from "@/lib/services/goals";
 import { listPositions } from "@/lib/services/invest";
@@ -123,6 +123,35 @@ describe("3. cartões, faturas e parcelas", () => {
     // Luiz não enxerga o cartão pessoal da esposa nem consegue lançar nele
     expect((await listCards(L())).some((c) => c.id === card!.id)).toBe(false);
     await expect(createCardPurchase(L(), { cardId: card!.id, description: "x", totalCents: "10", installments: 1, purchasedOn: todayISO() })).rejects.toThrow();
+  });
+});
+
+describe("3b. mudança de ciclo do cartão", () => {
+  it("recalcula só faturas abertas do mês corrente em diante; passadas/pagas ficam como estão", async () => {
+    const card = await createCard(E(), { nickname: "C6", brand: "visa", last4: "2222", closingDay: 10, dueDay: 17, limitCents: "1.000,00", visibility: "pessoal" });
+    const today = todayISO();
+    const past = addDays(today, -75);
+    await createCardPurchase(E(), { cardId: card!.id, description: "TV", totalCents: "1.200,00", installments: 4, purchasedOn: past, visibility: "pessoal" });
+    const before = await listInvoices(E(), card!.id);
+    const current = monthStartOf(today);
+    const pastInv = before.find((i) => i.reference_month < current)!;
+    await withUser(esposa.id, (db) => db.query("update fam_invoices set status = 'paga' where id = $1", [pastInv.id]));
+    const r = await updateCard(E(), card!.id, { nickname: "C6", brand: "visa", last4: "2222", closingDay: 1, dueDay: 8, limitCents: "1.000,00", visibility: "pessoal" }, today);
+    const after = await listInvoices(E(), card!.id);
+    const future = after.filter((i) => i.reference_month >= current && i.status === "aberta");
+    expect(r.recalculated).toBe(future.length);
+    expect(future.length).toBeGreaterThan(0);
+    for (const inv of future) {
+      expect(inv.closing_date.slice(8)).toBe("01");
+      expect(inv.due_date.slice(8)).toBe("08");
+    }
+    const untouched = after.find((i) => i.id === pastInv.id)!;
+    expect([untouched.closing_date, untouched.due_date]).toEqual([pastInv.closing_date, pastInv.due_date]);
+    // os lançamentos continuam nas mesmas faturas e os totais batem
+    expect(after.reduce((a, i) => a + i.total_cents, 0)).toBe(120000);
+    // o marido não consegue mudar datas de fatura do cartão pessoal dela
+    const hack = await withUser(luiz.id, (db) => db.one<{ ok: boolean }>("select fam_set_invoice_dates($1, '2027-01-01', '2027-01-09', $2) as ok", [future[0]!.id, current]));
+    expect(hack?.ok).toBe(false);
   });
 });
 

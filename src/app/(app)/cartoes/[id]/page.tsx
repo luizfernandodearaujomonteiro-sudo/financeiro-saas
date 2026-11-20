@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, CreditCard, RotateCcw } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, Pencil, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/lib/auth/member";
@@ -8,8 +8,9 @@ import { invoiceDisplayStatus, type InvoiceDisplayStatus } from "@/lib/domain/in
 import { listCards, listInvoices } from "@/lib/services/cards";
 import { ActionForm, Disclosure, SubmitButton } from "@/components/ui/client";
 import { AnimatedMoney, FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
-import { Badge, Card, CardTitle, EmptyState, Money, PageHeader, VisibilityBadge } from "@/components/ui/primitives";
-import { setInvoiceStatusAction } from "../actions";
+import { Badge, Card, CardTitle, EmptyState, Field, Input, Money, PageHeader, Select, VisibilityBadge } from "@/components/ui/primitives";
+import { centsToInput } from "@/lib/domain/money";
+import { setInvoiceStatusAction, updateCardAction } from "../actions";
 import { CardVisual } from "../CardVisual";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +74,32 @@ export default async function CardInvoicesPage({ params }: { params: Promise<{ i
               <p className="mt-2 text-xs text-ink-3">Limite: <Money cents={card.limit_cents} /></p>
             )}
           </Card>
+          {card.owner_id === member.userId && (
+            <Card>
+              <Disclosure summary={<span className="flex items-center gap-2 text-sm font-medium"><Pencil aria-hidden className="h-4 w-4 text-brand" /> Editar cartão</span>}>
+                <ActionForm action={updateCardAction} className="grid grid-cols-2 gap-3">
+                  <input type="hidden" name="id" value={card.id} />
+                  <Field label="Apelido" className="col-span-2"><Input name="nickname" defaultValue={card.nickname} required maxLength={60} /></Field>
+                  <Field label="Bandeira">
+                    <Select name="brand" defaultValue={card.brand}>
+                      {["visa", "mastercard", "elo", "amex", "hipercard", "outra"].map((b) => <option key={b} value={b}>{b}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Final"><Input name="last4" defaultValue={card.last4} pattern="[0-9]{4}" required /></Field>
+                  <Field label="Dia de fechamento"><Input name="closingDay" type="number" min={1} max={31} defaultValue={card.closing_day} required /></Field>
+                  <Field label="Dia de vencimento"><Input name="dueDay" type="number" min={1} max={31} defaultValue={card.due_day} required /></Field>
+                  <Field label="Limite"><Input name="limitCents" defaultValue={centsToInput(card.limit_cents)} /></Field>
+                  <Field label="Visibilidade">
+                    <Select name="visibility" defaultValue={card.visibility}><option value="compartilhado">Compartilhado</option><option value="pessoal">Pessoal</option></Select>
+                  </Field>
+                  <p className="col-span-2 text-[11px] text-ink-3">
+                    Mudou o dia de fechamento/vencimento? As faturas <b>em aberto</b> deste mês em diante ganham as novas datas; faturas passadas ou pagas não mudam e as compras continuam na mesma fatura.
+                  </p>
+                  <div className="col-span-2"><SubmitButton variant="secondary">Salvar cartão</SubmitButton></div>
+                </ActionForm>
+              </Disclosure>
+            </Card>
+          )}
         </FadeIn>
 
         <Card>

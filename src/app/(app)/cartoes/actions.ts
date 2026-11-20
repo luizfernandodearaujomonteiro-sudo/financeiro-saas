@@ -1,7 +1,7 @@
 "use server";
 import { requireCtx } from "@/lib/auth/member";
 import { formObject, run, type ActionState } from "@/lib/actions";
-import { createCard, createCardPurchase, deleteCard, setInvoiceStatus } from "@/lib/services/cards";
+import { createCard, createCardPurchase, deleteCard, setInvoiceStatus, updateCard } from "@/lib/services/cards";
 
 async function ctx() {
   const { member } = await requireCtx();
@@ -41,4 +41,15 @@ export async function setInvoiceStatusAction(_p: ActionState, fd: FormData): Pro
     await setInvoiceStatus(c, String(fd.get("invoiceId") ?? ""), status);
     return status === "paga" ? "Fatura marcada como paga." : "Fatura reaberta.";
   }, ["/cartoes", `/cartoes/${cardId}`]);
+}
+
+export async function updateCardAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const c = await ctx();
+  const o = formObject(fd);
+  return run(async () => {
+    const r = await updateCard(c, o.id ?? "", o);
+    return r.recalculated
+      ? `Cartão atualizado. ${r.recalculated} fatura(s) em aberto ajustada(s) para o novo ciclo.`
+      : "Cartão atualizado.";
+  }, ["/cartoes", `/cartoes/${o.id ?? ""}`, "/painel"]);
 }

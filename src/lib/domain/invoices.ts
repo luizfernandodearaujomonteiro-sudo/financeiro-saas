@@ -99,8 +99,13 @@ export function installmentSlot(card: CardCycle, purchaseDate: ISODate, installm
  * Usa o vencimento real informado pelo banco quando ele é >= fechamento calculado.
  */
 export function slotForDueDate(card: CardCycle, dueDate: ISODate): InvoiceSlot {
-  const { y, m } = parseISODate(dueDate);
-  const closing = card.dueDay > card.closingDay ? { y, m } : addMonthsYM(y, m, -1);
-  const slot = invoiceForClosingMonth(card, closing.y, closing.m);
+  const slot = slotForReferenceMonth(card, dueDate);
   return dueDate >= slot.closingDate ? { ...slot, dueDate } : slot;
+}
+
+/** Fatura do ciclo atual do cartão cujo mês de referência (vencimento) é `month`. */
+export function slotForReferenceMonth(card: CardCycle, month: ISODate): InvoiceSlot {
+  const { y, m } = parseISODate(month);
+  const closing = card.dueDay > card.closingDay ? { y, m } : addMonthsYM(y, m, -1);
+  return invoiceForClosingMonth(card, closing.y, closing.m);
 }

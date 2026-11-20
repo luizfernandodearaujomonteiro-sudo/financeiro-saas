@@ -1,6 +1,6 @@
 import { withUser, type Db } from "../db";
-import { todayISO } from "../domain/dates";
-import { assignInvoice, planInstallments, type CardCycle, type InvoiceSlot } from "../domain/invoices";
+import { monthStartOf, todayISO } from "../domain/dates";
+import { assignInvoice, planInstallments, slotForReferenceMonth, type CardCycle, type InvoiceSlot } from "../domain/invoices";
 import { cardInput, purchaseInput } from "../validation";
 import type { MemberCtx } from "./types";
 
@@ -51,15 +51,37 @@ export async function createCard(ctx: MemberCtx, raw: unknown) {
   );
 }
 
-export async function updateCard(ctx: MemberCtx, id: string, raw: unknown) {
+/**
+ * Atualiza o cartão. Se o ciclo (fechamento/vencimento) mudar, recalcula as datas das
+ * faturas ABERTAS do mês corrente em diante para o novo ciclo; faturas passadas,
+ * fechadas ou pagas ficam como estão. Os lançamentos continuam na mesma fatura
+ * (mesmo mês de referência) — só as datas de fechamento/vencimento mudam.
+ */
+export async function updateCard(ctx: MemberCtx, id: string, raw: unknown, today = todayISO()) {
   const v = cardInput.parse(raw);
-  await withUser(ctx.userId, (db) =>
-    db.query(
+  return withUser(ctx.userId, async (db) => {
+    const old = await db.one<{ closing_day: number; due_day: number }>("select closing_day, due_day from public.fam_cards where id = $1 and owner_id = auth.uid()", [id]);
+    if (!old) throw new Error("Cartão não encontrado ou de outra pessoa");
+    await db.query(
       `update public.fam_cards set nickname=$2, brand=$3, last4=$4, closing_day=$5, due_day=$6, limit_cents=$7, visibility=$8
         where id=$1 and owner_id = auth.uid()`,
       [id, v.nickname, v.brand, v.last4, v.closingDay, v.dueDay, v.limitCents, v.visibility],
-    ),
-  );
+    );
+    let recalculated = 0;
+    if (old.closing_day !== v.closingDay || old.due_day !== v.dueDay) {
+      const current = monthStartOf(today);
+      const open = await db.query<{ id: string; reference_month: string }>(
+        "select id, reference_month from public.fam_invoices where card_id = $1 and status = 'aberta' and reference_month >= $2 order by reference_month",
+        [id, current],
+      );
+      for (const inv of open) {
+        const slot = slotForReferenceMonth({ closingDay: v.closingDay, dueDay: v.dueDay }, inv.reference_month);
+        const r = await db.one<{ ok: boolean }>("select public.fam_set_invoice_dates($1, $2, $3, $4) as ok", [inv.id, slot.closingDate, slot.dueDate, current]);
+        if (r?.ok) recalculated++;
+      }
+    }
+    return { recalculated };
+  });
 }
 
 /**
