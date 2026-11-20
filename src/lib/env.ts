@@ -65,6 +65,10 @@ export const env = {
   get evolutionAllowConnect() {
     return bool(process.env.EVOLUTION_ALLOW_CONNECT, false);
   },
+  /** "Criar minha família" para usuários logados sem família (padrão: ligado). */
+  get selfOnboardingEnabled() {
+    return bool(process.env.SELF_ONBOARDING_ENABLED, true);
+  },
   get simulatorEnabled() {
     return bool(process.env.LOCAL_DEV_AUTH) || process.env.WHATSAPP_PROVIDER === "simulator";
   },

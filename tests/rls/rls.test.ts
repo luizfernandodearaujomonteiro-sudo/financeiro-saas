@@ -283,3 +283,43 @@ describe("dados por perfil", () => {
     expect(await count(esposa.id, "select 1 from fin_financeiro_goal_contributions")).toBeGreaterThan(0);
   });
 });
+
+describe("onboarding: criar minha família (fin_financeiro_private.fin_financeiro_create_my_household)", () => {
+  const novo = "88888888-8888-4888-8888-888888888888";
+  const fn = "fin_financeiro_private.fin_financeiro_create_my_household";
+  beforeAll(async () => {
+    await pool.query("insert into auth.users (id, email) values ($1, 'onboarding@exemplo.local') on conflict do nothing", [novo]);
+  });
+  it("anon não executa; função não está no schema public nem com EXECUTE para PUBLIC", async () => {
+    await expect(asUser(app, null, (c) => c.query(`select ${fn}('X', 'Y')`), "anon")).rejects.toThrow(/permission denied/);
+    const r = await pool.query(`select n.nspname, has_function_privilege('public', p.oid, 'EXECUTE') as pub, has_function_privilege('anon', p.oid, 'EXECUTE') as anon
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace where p.proname = 'fin_financeiro_create_my_household'`);
+    expect(r.rows).toEqual([{ nspname: "fin_financeiro_private", pub: false, anon: false }]);
+  });
+  it("valida os tamanhos dos textos", async () => {
+    await expect(asUser(app, novo, (c) => c.query(`select ${fn}('   ', 'Novo')`))).rejects.toThrow(/nome da família/);
+    await expect(asUser(app, novo, (c) => c.query(`select ${fn}($1, 'Novo')`, ["x".repeat(81)]))).rejects.toThrow(/nome da família/);
+    await expect(asUser(app, novo, (c) => c.query(`select ${fn}('Casa', $1)`, ["y".repeat(61)]))).rejects.toThrow(/seu nome/);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_household_members where user_id = $1", [novo])).rows[0].n).toBe(0);
+  });
+  it("cria família com o usuário como dono, categorias padrão e configurações (atômico)", async () => {
+    const hh = (await asUser(app, novo, (c) => c.query(`select ${fn}('  Casa Nova  ', ' Novo Dono ') as id`))).rows[0].id;
+    const m = await pool.query("select role from fin_financeiro_household_members where user_id = $1 and household_id = $2", [novo, hh]);
+    expect(m.rows).toEqual([{ role: "owner" }]);
+    expect((await pool.query("select name from fin_financeiro_households where id = $1", [hh])).rows[0].name).toBe("Casa Nova");
+    expect((await pool.query("select display_name from fin_financeiro_profiles where id = $1", [novo])).rows[0].display_name).toBe("Novo Dono");
+    expect((await pool.query("select count(*)::int n from fin_financeiro_categories where household_id = $1", [hh])).rows[0].n).toBe(17);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_household_settings where household_id = $1", [hh])).rows[0].n).toBe(1);
+    // vê a própria família e nada da família do Luiz
+    expect(await count(novo, "select 1 from fin_financeiro_households")).toBe(1);
+    expect(await count(novo, "select 1 from fin_financeiro_entries where household_id = $1", [householdId])).toBe(0);
+    // como dono, pode gerar convite
+    const t = (await asUser(app, novo, (c) => c.query("select fin_financeiro_create_invite() as t"))).rows[0].t;
+    expect(t).toMatch(/^[0-9a-f]{64}$/);
+  });
+  it("não cria uma segunda família; membro existente também não pode", async () => {
+    await expect(asUser(app, novo, (c) => c.query(`select ${fn}('Outra', 'Novo')`))).rejects.toThrow(/já pertence a uma família/);
+    await expect(asUser(app, luiz.id, (c) => c.query(`select ${fn}('Outra', 'Luiz')`))).rejects.toThrow(/já pertence a uma família/);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_household_members where user_id = $1", [novo])).rows[0].n).toBe(1);
+  });
+});

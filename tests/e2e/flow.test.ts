@@ -26,6 +26,8 @@ import { computeAndSnapshot } from "@/lib/services/networth";
 import { membersComparison } from "@/lib/services/reports";
 import { approveReview, listReview, rejectReview } from "@/lib/services/review";
 import { recentSearches, saveSearch, searchEntries } from "@/lib/services/search";
+import { createInvite, createMyHousehold } from "@/lib/services/household";
+import { listCategories } from "@/lib/services/categories";
 import { ingestDocument } from "@/lib/importers/pdf";
 import { clearPdfPassword, hasPdfPassword, pdfPasswordForJob, savePdfPassword } from "@/lib/services/pdf-password";
 import { makePdf } from "../support/pdf";
@@ -478,5 +480,23 @@ describe("9. metas, busca, patrimônio, investimentos, comparação", () => {
     const luizShared = await withService((db) => db.one<{ s: number }>(
       "select coalesce(sum(amount_cents),0)::bigint s from fin_financeiro_entries where owner_id=$1 and visibility='compartilhado' and kind='despesa' and budget_month=$2", [luiz.id, month]));
     expect(r.members.find((m) => m.memberId === luiz.id)?.totalCents).toBe(Number(luizShared!.s));
+  });
+});
+
+describe("10. onboarding: usuário local sem família cria a sua", () => {
+  it("vira dono, tem categorias, convida — e não cria uma segunda família nem vê a do Luiz", async () => {
+    const login = await authenticate(outro.email, outro.password, "10.0.1.1", localVerifier);
+    expect(login.ok).toBe(true);
+    expect(await loadMembership(outro.id)).toBeNull();
+    const hh = await createMyHousehold(outro.id, { name: "Família do Outro App", displayName: "Outro" });
+    const m = await loadMembership(outro.id);
+    expect(m).toMatchObject({ householdId: hh, role: "owner", displayName: "Outro", householdName: "Família do Outro App" });
+    const ctx = { userId: outro.id, householdId: hh };
+    expect((await listCategories(ctx)).length).toBe(17);
+    expect(await createInvite(ctx)).toMatch(/^[0-9a-f]{64}$/);
+    await expect(createMyHousehold(outro.id, { name: "Segunda", displayName: "Outro" })).rejects.toThrow(/já pertence a uma família/);
+    await expect(createMyHousehold(luiz.id, { name: "Outra do Luiz", displayName: "Luiz" })).rejects.toThrow(/já pertence a uma família/);
+    expect(await listEntriesForMonth(ctx, month, "tudo")).toHaveLength(0);
+    await expect(createMyHousehold(outro.id, { name: "", displayName: "x" })).rejects.toThrow();
   });
 });

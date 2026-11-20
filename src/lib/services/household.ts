@@ -2,6 +2,7 @@ import { z } from "zod";
 import { withAnon, withUser } from "../db";
 import { DEFAULT_UNDO_MINUTES } from "../domain/undo";
 import { normalizePhone } from "../domain/phone";
+import { createHouseholdInput } from "../validation";
 import type { MemberCtx } from "./types";
 
 export interface MemberRow {
@@ -65,5 +66,16 @@ export async function saveSettings(ctx: MemberCtx, raw: unknown) {
        on conflict (household_id) do update set whatsapp_undo_minutes = excluded.whatsapp_undo_minutes, bill_alert_days = excluded.bill_alert_days, updated_at = now()`,
       [ctx.householdId, v.undoMinutes, v.alertDays],
     ),
+  );
+}
+
+/**
+ * Onboarding: usuário logado SEM família cria a sua e vira dono. Executa como o próprio
+ * usuário (RLS); a função SQL recusa quem já é membro e é atômica.
+ */
+export async function createMyHousehold(userId: string, raw: unknown): Promise<string> {
+  const v = createHouseholdInput.parse(raw);
+  return withUser(userId, async (db) =>
+    (await db.one<{ id: string }>("select fin_financeiro_private.fin_financeiro_create_my_household($1, $2) as id", [v.name, v.displayName]))!.id,
   );
 }

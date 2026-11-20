@@ -186,3 +186,14 @@ describe("cookie de tema por perfil", () => {
     expect(decodeTheme(themeCookieFromPrefs({ theme_mode: "auto", auto_dark_start: 20, auto_dark_end: 5 }))).toEqual({ mode: "auto", start: 20, end: 5 });
   });
 });
+
+describe("onboarding: validação de 'Criar minha família'", () => {
+  it("aceita nomes válidos (aparando espaços) e recusa vazios ou longos", async () => {
+    const { createHouseholdInput } = await import("@/lib/validation");
+    expect(createHouseholdInput.parse({ name: "  Família Silva ", displayName: " Luiz " })).toEqual({ name: "Família Silva", displayName: "Luiz" });
+    expect(createHouseholdInput.safeParse({ name: "   ", displayName: "Luiz" }).success).toBe(false);
+    expect(createHouseholdInput.safeParse({ name: "x".repeat(81), displayName: "Luiz" }).success).toBe(false);
+    expect(createHouseholdInput.safeParse({ name: "Casa", displayName: "y".repeat(61) }).success).toBe(false);
+    expect(createHouseholdInput.safeParse({ name: "Casa" }).success).toBe(false);
+  });
+});

@@ -154,6 +154,18 @@ async function main() {
     await other.click('button[type="submit"]');
     await other.waitForURL(`${BASE}/sem-acesso`, { timeout: 30_000 });
     console.log("  ✓ conta sem família é redirecionada para /sem-acesso");
+    // onboarding: "Criar minha família" -> vira dono e entra no painel
+    await other.setViewportSize({ width: 1440, height: 900 });
+    await expectText(other, "Criar minha família");
+    await other.waitForTimeout(900);
+    await other.screenshot({ path: `${OUT}/18-onboarding-criar-familia.png` });
+    console.log("  ✓ 18-onboarding-criar-familia.png");
+    await other.fill('input[name="name"]', "Família do Outro App");
+    await other.fill('input[name="displayName"]', "Outro");
+    await other.getByRole("button", { name: "Criar família e entrar" }).click();
+    await other.waitForURL(`${BASE}/painel`, { timeout: 30_000 });
+    await expectText(other, "Olá, Outro");
+    console.log("  ✓ onboarding: família criada e painel aberto");
     console.log("Fumaça no navegador OK.");
   } finally {
     await browser.close();

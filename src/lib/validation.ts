@@ -57,3 +57,9 @@ export const purchaseInput = z.object({
   visibility: visibility.default("pessoal"),
   costType: costType.default("variavel"),
 });
+
+/** Onboarding: "Criar minha família" (mesmos limites da função SQL). */
+export const createHouseholdInput = z.object({
+  name: z.string().trim().min(1, "Informe o nome da família").max(80, "Nome da família: até 80 caracteres"),
+  displayName: z.string().trim().min(1, "Informe seu nome").max(60, "Seu nome: até 60 caracteres"),
+});
