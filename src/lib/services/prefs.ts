@@ -7,12 +7,14 @@ export interface Prefs {
   auto_dark_start: number;
   auto_dark_end: number;
   comparison_mode: "valores" | "percentuais";
+  daily_reminder: boolean;
+  weekly_summary: boolean;
 }
 
-export const DEFAULT_PREFS: Prefs = { theme_mode: "dark", auto_dark_start: 18, auto_dark_end: 6, comparison_mode: "valores" };
+export const DEFAULT_PREFS: Prefs = { theme_mode: "dark", auto_dark_start: 18, auto_dark_end: 6, comparison_mode: "valores", daily_reminder: true, weekly_summary: true };
 
 export async function getPrefs(userId: string): Promise<Prefs> {
-  const r = await withUser(userId, (db) => db.one<Prefs>("select theme_mode, auto_dark_start, auto_dark_end, comparison_mode from public.fam_profile_prefs where user_id = auth.uid()"));
+  const r = await withUser(userId, (db) => db.one<Prefs>("select theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary from public.fam_profile_prefs where user_id = auth.uid()"));
   return r ?? DEFAULT_PREFS;
 }
 
@@ -24,6 +26,8 @@ export const prefsInput = z.object({
   autoDarkStart: hour,
   autoDarkEnd: hour,
   comparisonMode: z.preprocess(blankToUndefined, z.enum(["valores", "percentuais"]).optional()),
+  dailyReminder: z.preprocess((v) => (v === undefined || v === null || v === "" ? undefined : v === true || v === "true" || v === "on"), z.boolean().optional()),
+  weeklySummary: z.preprocess((v) => (v === undefined || v === null || v === "" ? undefined : v === true || v === "true" || v === "on"), z.boolean().optional()),
 });
 
 export async function savePrefs(userId: string, raw: unknown) {
@@ -34,13 +38,17 @@ export async function savePrefs(userId: string, raw: unknown) {
     auto_dark_start: v.autoDarkStart ?? cur.auto_dark_start,
     auto_dark_end: v.autoDarkEnd ?? cur.auto_dark_end,
     comparison_mode: v.comparisonMode ?? cur.comparison_mode,
+    daily_reminder: v.dailyReminder ?? cur.daily_reminder,
+    weekly_summary: v.weeklySummary ?? cur.weekly_summary,
   };
   await withUser(userId, (db) =>
     db.query(
-      `insert into public.fam_profile_prefs (user_id, theme_mode, auto_dark_start, auto_dark_end, comparison_mode) values (auth.uid(), $1, $2, $3, $4)
+      `insert into public.fam_profile_prefs (user_id, theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary)
+       values (auth.uid(), $1, $2, $3, $4, $5, $6)
        on conflict (user_id) do update set theme_mode = excluded.theme_mode, auto_dark_start = excluded.auto_dark_start,
-         auto_dark_end = excluded.auto_dark_end, comparison_mode = excluded.comparison_mode, updated_at = now()`,
-      [next.theme_mode, next.auto_dark_start, next.auto_dark_end, next.comparison_mode],
+         auto_dark_end = excluded.auto_dark_end, comparison_mode = excluded.comparison_mode,
+         daily_reminder = excluded.daily_reminder, weekly_summary = excluded.weekly_summary, updated_at = now()`,
+      [next.theme_mode, next.auto_dark_start, next.auto_dark_end, next.comparison_mode, next.daily_reminder, next.weekly_summary],
     ),
   );
   return next;

@@ -10,7 +10,7 @@ import { ActionForm, CopyButton, SubmitButton } from "@/components/ui/client";
 import { FadeIn } from "@/components/ui/motion";
 import { Badge, Card, CardTitle, Field, Input, LinkButton, PageHeader, Select } from "@/components/ui/primitives";
 import {
-  checkConnectionAction, connectQrAction, createInviteAction, disconnectGmailAction, saveSettingsAction, saveThemeAction, saveWhatsappConfigAction,
+  checkConnectionAction, connectQrAction, createInviteAction, disconnectGmailAction, saveMessagePrefsAction, saveSettingsAction, saveThemeAction, saveWhatsappConfigAction,
   setPhoneAction, setWebhookAction, syncGmailMockAction, testWhatsappAction, updateNameAction,
 } from "./actions";
 import { ActionButton, InviteBox, QrBox } from "./ResultBoxes";
@@ -146,6 +146,23 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
               </fieldset>
             </ActionForm>
             {!isOwner && <p className="mt-3 text-xs text-ink-3">Somente o dono altera estas opções.</p>}
+            <div className="mt-5 border-t border-line pt-4">
+              <p className="mb-3 text-xs font-semibold tracking-wide text-ink-2 uppercase">Minhas mensagens no WhatsApp</p>
+              <ActionForm action={saveMessagePrefsAction} className="space-y-2">
+                <input type="hidden" name="dailyReminder" value="false" />
+                <label className="flex items-center gap-3 text-sm">
+                  <input type="checkbox" name="dailyReminder" value="true" defaultChecked={prefs.daily_reminder} className="h-4 w-4 accent-[var(--brand)]" />
+                  Lembrete diário para registrar os gastos (20h30)
+                </label>
+                <input type="hidden" name="weeklySummary" value="false" />
+                <label className="flex items-center gap-3 text-sm">
+                  <input type="checkbox" name="weeklySummary" value="true" defaultChecked={prefs.weekly_summary} className="h-4 w-4 accent-[var(--brand)]" />
+                  Resumo semanal (domingo de manhã)
+                </label>
+                <p className="text-[11px] text-ink-3">Alertas de vencimento continuam ativos. Vale só para o seu perfil.</p>
+                <SubmitButton variant="secondary">Salvar minhas mensagens</SubmitButton>
+              </ActionForm>
+            </div>
           </Card>
         </FadeIn>
       </div>

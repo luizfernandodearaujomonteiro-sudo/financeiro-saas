@@ -46,6 +46,16 @@ export async function saveThemeAction(_p: ActionState, fd: FormData): Promise<Ac
   }, [PATH]);
 }
 
+/** Preferências pessoais de mensagens do assistente (lembrete diário / resumo semanal). */
+export async function saveMessagePrefsAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { member } = await load();
+  const last = (k: string) => fd.getAll(k).at(-1); // hidden "false" + checkbox "true"
+  return run(async () => {
+    await savePrefs(member.userId, { dailyReminder: last("dailyReminder"), weeklySummary: last("weeklySummary") });
+    return "Preferências de mensagens salvas.";
+  }, [PATH]);
+}
+
 // ----------------------------- Família e alertas -----------------------------
 export async function createInviteAction(): Promise<ActionState> {
   const { ctx, member } = await load();

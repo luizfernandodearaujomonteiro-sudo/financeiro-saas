@@ -29,7 +29,9 @@ import { recentSearches, saveSearch, searchEntries } from "@/lib/services/search
 import { ingestDocument } from "@/lib/importers/pdf";
 import { mockStatementText } from "@/lib/gmail/sync";
 import { createMockItem, setAccountVisibility } from "@/lib/pluggy/service";
-import { runDueAlerts } from "@/lib/whatsapp/notifications";
+import { runDailyReminder, runDueAlerts, runWeeklySummary } from "@/lib/whatsapp/notifications";
+import type { WhatsAppProvider } from "@/lib/whatsapp/provider";
+import { getPrefs, savePrefs } from "@/lib/services/prefs";
 import { evolutionPayload } from "@/lib/whatsapp/simulate";
 import { POST as pluggyWebhook } from "@/app/api/pluggy/webhook/route";
 import { POST as whatsappWebhook, GET as whatsappVerify } from "@/app/api/whatsapp/webhook/route";
@@ -53,7 +55,7 @@ afterAll(async () => {
 });
 
 async function outbox(userId: string) {
-  return withService((db) => db.query<{ body: string; direction: string }>("select body, direction from fam_whatsapp_messages where user_id = $1 order by id", [userId]));
+  return withService((db) => db.query<{ body: string; direction: string }>("select body, direction from fam_whatsapp_messages where user_id = $1 and status = 'ok' order by id", [userId]));
 }
 
 function waRequest(body: unknown, secret: string | null = process.env.WHATSAPP_WEBHOOK_SECRET!) {
@@ -331,6 +333,17 @@ describe("8. alertas de vencimento: código em mensagem separada, respeitando vi
     const res = await cronRoute(new Request("http://localhost/api/cron/whatsapp-due-alerts"), { params: Promise.resolve({ job: "whatsapp-due-alerts" }) });
     expect(res.status).toBe(401);
   });
+  it("se o envio falhar por completo, a reserva é desfeita e o próximo cron tenta de novo", async () => {
+    const failing: WhatsAppProvider = { name: "simulator", sendText: async () => ({ ok: false, error: "falha simulada" }) };
+    const r = await runDueAlerts(new Date(), failing);
+    expect(r.sent).toBe(0);
+    expect(r.failed).toBeGreaterThan(0);
+    const claims = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_notification_log where kind in ('bill_due','invoice_due')"));
+    expect(claims!.n).toBe(0);
+    const errors = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_whatsapp_messages where status = 'erro' and error = 'falha simulada'"));
+    expect(errors!.n).toBeGreaterThan(0);
+  });
+
   it("conta compartilhada -> os dois; pessoal -> só o dono; Pix sozinho na mensagem", async () => {
     const condPix = (await withService((db) => db.one<{ pix_code: string }>("select pix_code from fam_bills where description = 'Condomínio'")))!.pix_code;
     const res = await cronRoute(new Request("http://localhost/api/cron/whatsapp-due-alerts", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } }), { params: Promise.resolve({ job: "whatsapp-due-alerts" }) });
@@ -352,6 +365,23 @@ describe("8. alertas de vencimento: código em mensagem separada, respeitando vi
     expect(wifeOut.some((b) => b.includes("Cartão Simulado Master") && b.includes("indisponível"))).toBe(true);
     // idempotente
     expect((await runDueAlerts()).sent).toBe(0);
+  });
+});
+
+describe("8b. preferências de lembrete diário e resumo semanal", () => {
+  it("quem desligou não recebe; quem manteve recebe", async () => {
+    await savePrefs(esposa.id, { dailyReminder: false, weeklySummary: false });
+    const d = await runDailyReminder();
+    const w = await runWeeklySummary();
+    expect(d).toEqual({ sent: 1, failed: 0 });
+    expect(w).toEqual({ sent: 1, failed: 0 });
+    const wife = (await outbox(esposa.id)).map((m) => m.body);
+    const husband = (await outbox(luiz.id)).map((m) => m.body);
+    expect(wife.some((b) => b.includes("Já registrou os gastos de hoje"))).toBe(false);
+    expect(wife.some((b) => b.includes("Resumo da semana"))).toBe(false);
+    expect(husband.some((b) => b.includes("Já registrou os gastos de hoje"))).toBe(true);
+    expect(husband.some((b) => b.includes("Resumo da semana"))).toBe(true);
+    expect((await getPrefs(esposa.id))).toMatchObject({ daily_reminder: false, weekly_summary: false });
   });
 });
 

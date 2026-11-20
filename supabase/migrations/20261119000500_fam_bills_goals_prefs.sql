@@ -134,6 +134,8 @@ create table if not exists public.fam_profile_prefs (
   auto_dark_start  smallint not null default 18 check (auto_dark_start between 0 and 23),
   auto_dark_end    smallint not null default 6 check (auto_dark_end between 0 and 23),
   comparison_mode  text not null default 'valores' check (comparison_mode in ('valores', 'percentuais')),
+  daily_reminder   boolean not null default true,  -- lembrete diário no WhatsApp
+  weekly_summary   boolean not null default true,  -- resumo semanal no WhatsApp
   updated_at       timestamptz not null default now()
 );
 
