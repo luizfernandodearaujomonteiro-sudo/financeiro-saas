@@ -33,7 +33,7 @@ export async function createInvite(ctx: MemberCtx): Promise<string> {
 }
 
 export async function inviteInfo(token: string): Promise<string | null> {
-  return withAnon(async (db) => (await db.one<{ name: string | null }>("select public.fam_invite_info($1) as name", [token]))?.name ?? null);
+  return withAnon(async (db) => (await db.one<{ name: string | null }>("select fam_private.fam_invite_info($1) as name", [token]))?.name ?? null);
 }
 
 export async function acceptInvite(userId: string, token: string, displayName: string) {

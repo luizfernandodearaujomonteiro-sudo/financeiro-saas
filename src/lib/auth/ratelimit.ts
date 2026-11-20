@@ -27,7 +27,7 @@ export function isLockedOut(failures: { email: number; ip: number }): boolean {
 export async function loginFailures(email: string, ip: string) {
   return withAnon(async (db) => {
     const r = await db.one<{ e: number; i: number }>(
-      "select public.fam_login_failures($1, $3) as e, public.fam_login_failures($2, $3) as i",
+      "select fam_private.fam_login_failures($1, $3) as e, fam_private.fam_login_failures($2, $3) as i",
       [key("email", email), key("ip", ip), LOGIN_POLICY.windowSeconds],
     );
     return { email: r?.e ?? 0, ip: r?.i ?? 0 };
@@ -36,7 +36,7 @@ export async function loginFailures(email: string, ip: string) {
 
 export async function recordLoginAttempt(email: string, ip: string, success: boolean) {
   await withAnon(async (db) => {
-    await db.query("select public.fam_record_login_attempt($1, $2)", [key("email", email), success]);
-    await db.query("select public.fam_record_login_attempt($1, $2)", [key("ip", ip), success]);
+    await db.query("select fam_private.fam_record_login_attempt($1, $2)", [key("email", email), success]);
+    await db.query("select fam_private.fam_record_login_attempt($1, $2)", [key("ip", ip), success]);
   });
 }

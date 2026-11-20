@@ -5,6 +5,15 @@
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
+-- Schema privado (NÃO exposto pelo PostgREST/Data API do Supabase).
+-- RPCs que precisam ser chamadas pelo papel anon ficam aqui, para que
+-- ninguém com a anon key pública consiga chamá-las pela API REST.
+-- ---------------------------------------------------------------------
+create schema if not exists fam_private;
+revoke all on schema fam_private from public;
+grant usage on schema fam_private to anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------
 -- Helpers de pertencimento (usados pelas políticas RLS)
 -- ---------------------------------------------------------------------
 create or replace function public.fam_current_household()
@@ -239,7 +248,7 @@ begin
   return v_token;
 end $$;
 
-create or replace function public.fam_invite_info(p_token text)
+create or replace function fam_private.fam_invite_info(p_token text)
 returns text language sql stable security definer set search_path = '' as $$
   select h.name
     from public.fam_household_invites i
@@ -280,14 +289,14 @@ end $$;
 -- ---------------------------------------------------------------------
 -- Limite de tentativas de login (chave = HMAC calculado no servidor)
 -- ---------------------------------------------------------------------
-create or replace function public.fam_login_failures(p_key text, p_window_seconds integer)
+create or replace function fam_private.fam_login_failures(p_key text, p_window_seconds integer)
 returns integer language sql stable security definer set search_path = '' as $$
   select count(*)::integer from public.fam_login_attempts
    where key_hash = p_key and success = false
      and created_at > now() - make_interval(secs => least(greatest(p_window_seconds, 1), 86400))
 $$;
 
-create or replace function public.fam_record_login_attempt(p_key text, p_success boolean)
+create or replace function fam_private.fam_record_login_attempt(p_key text, p_success boolean)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
   if p_key is null or char_length(p_key) <> 64 then
@@ -390,8 +399,7 @@ revoke execute on function
   public.fam_recompute_invoice_total(uuid), public.fam_entries_invoice_total(),
   public.fam_seed_default_categories(uuid),
   public.fam_bootstrap_household(uuid, text, text), public.fam_bootstrap_add_member(uuid, uuid, text),
-  public.fam_create_invite(), public.fam_invite_info(text), public.fam_accept_invite(text, text),
-  public.fam_login_failures(text, integer), public.fam_record_login_attempt(text, boolean),
+  public.fam_create_invite(), public.fam_accept_invite(text, text),
   public.fam_store_gmail_token(text, text, text), public.fam_disconnect_gmail(),
   public.fam_set_member_phone(uuid, text), public.fam_set_whatsapp_secrets(text, text),
   public.fam_get_whatsapp_secrets()
@@ -400,15 +408,19 @@ from public, anon, authenticated;
 grant execute on function
   public.fam_current_household(), public.fam_is_member(uuid), public.fam_is_owner(uuid),
   public.fam_shares_household(uuid), public.fam_can_see_card(uuid),
-  public.fam_create_invite(), public.fam_invite_info(text), public.fam_accept_invite(text, text),
+  public.fam_create_invite(), public.fam_accept_invite(text, text),
   public.fam_store_gmail_token(text, text, text), public.fam_disconnect_gmail(),
   public.fam_set_member_phone(uuid, text), public.fam_set_whatsapp_secrets(text, text),
   public.fam_get_whatsapp_secrets()
 to authenticated;
 
+-- Funções do schema privado: sem EXECUTE para PUBLIC; somente os papéis do app.
+revoke execute on function
+  fam_private.fam_invite_info(text), fam_private.fam_login_failures(text, integer), fam_private.fam_record_login_attempt(text, boolean)
+from public;
 grant execute on function
-  public.fam_invite_info(text), public.fam_login_failures(text, integer), public.fam_record_login_attempt(text, boolean)
-to anon, authenticated;
+  fam_private.fam_invite_info(text), fam_private.fam_login_failures(text, integer), fam_private.fam_record_login_attempt(text, boolean)
+to anon, authenticated, service_role;
 
 grant execute on function
   public.fam_bootstrap_household(uuid, text, text), public.fam_bootstrap_add_member(uuid, uuid, text),
