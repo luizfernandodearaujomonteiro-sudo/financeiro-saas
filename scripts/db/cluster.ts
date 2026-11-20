@@ -77,6 +77,8 @@ export function start(o: ClusterOptions) {
   initIfNeeded(o);
   if (isRunning(o)) return false;
   const dir = abs(o.dataDir);
+  // o Postgres exige 0700/0750 no diretório de dados (cópias/checkouts podem afrouxar a permissão)
+  fs.chmodSync(dir, 0o700);
   const sock = path.join(path.dirname(dir), "sock");
   fs.mkdirSync(sock, { recursive: true, mode: 0o700 });
   const opts = `-p ${o.port} -c listen_addresses=127.0.0.1 -c unix_socket_directories=${sock} -c timezone=UTC -c fsync=off`;
