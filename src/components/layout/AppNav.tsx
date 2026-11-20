@@ -37,7 +37,7 @@ export function MobileNav({ simulator, reviewCount }: { simulator: boolean; revi
   const main = NAV.filter((n) => n.main);
   return (
     <>
-      <nav aria-label="Navegação" className="glass fixed inset-x-3 bottom-3 z-40 flex items-center justify-around rounded-2xl px-1 py-1.5 md:hidden">
+      <nav aria-label="Navegação" className="glass fixed inset-x-3 bottom-3 z-40 flex !bg-surface-solid/95 items-center justify-around rounded-2xl px-1 py-1.5 md:hidden">
         {main.map((it) => {
           const active = path.startsWith(it.href);
           return (

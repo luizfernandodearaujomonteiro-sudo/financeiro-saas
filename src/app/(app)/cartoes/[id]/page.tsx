@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCtx } from "@/lib/auth/member";
 import { withUser } from "@/lib/db";
-import { formatDateBR, monthLabel, todayISO } from "@/lib/domain/dates";
+import { formatDateBR, monthLabel, todayISO , capitalizeFirst} from "@/lib/domain/dates";
 import { invoiceDisplayStatus, type InvoiceDisplayStatus } from "@/lib/domain/invoices";
 import { listCards, listInvoices } from "@/lib/services/cards";
 import { ActionForm, Disclosure, SubmitButton } from "@/components/ui/client";
@@ -91,7 +91,7 @@ export default async function CardInvoicesPage({ params }: { params: Promise<{ i
                         summary={
                           <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
                             <span>
-                              <span className="block font-semibold capitalize">{monthLabel(inv.reference_month)}</span>
+                              <span className="block font-semibold">{capitalizeFirst(monthLabel(inv.reference_month))}</span>
                               <span className="block text-xs text-ink-3">Fecha {formatDateBR(inv.closing_date)} · vence {formatDateBR(inv.due_date)}</span>
                             </span>
                             <span className="flex items-center gap-3">

@@ -1,8 +1,9 @@
 /**
  * Armazenamento de PDFs de fatura.
  *  - local: sistema de arquivos (.local/storage), usado no desenvolvimento;
- *  - supabase: bucket privado "fam_faturas". Jobs usam service role para enviar;
- *    o navegador NUNCA recebe chaves — downloads passam por rota autenticada.
+ *  - supabase: bucket privado "fam_faturas" (criado manualmente). O acesso ao arquivo usa a
+ *    service key SOMENTE no servidor e SEMPRE depois de a RLS confirmar (fam_invoice_documents)
+ *    que o documento pertence ao usuário. O navegador nunca recebe chaves nem URLs públicas.
  * Caminho: <household_id>/<owner_id>/<sha256>.pdf
  */
 import "server-only";
@@ -35,15 +36,10 @@ export async function putObject(p: string, bytes: Uint8Array, contentType: strin
     await fs.writeFile(f, bytes, { mode: 0o600 });
     return;
   }
-  const sb = serviceClient();
-  const { error } = await sb.storage.from(BUCKET).upload(safePath(p), bytes, { contentType, upsert: true });
-  if (error && /not found/i.test(error.message)) {
-    await sb.storage.createBucket(BUCKET, { public: false });
-    const retry = await sb.storage.from(BUCKET).upload(p, bytes, { contentType, upsert: true });
-    if (retry.error) throw new Error(`falha no upload: ${retry.error.message}`);
-  } else if (error) {
-    throw new Error(`falha no upload: ${error.message}`);
-  }
+  // O bucket privado "fam_faturas" é criado MANUALMENTE no painel do Supabase (ver docs/ENTREGA.md):
+  // o app não cria nem altera buckets no projeto compartilhado.
+  const { error } = await serviceClient().storage.from(BUCKET).upload(safePath(p), bytes, { contentType, upsert: true });
+  if (error) throw new Error(/not found/i.test(error.message) ? `bucket privado "${BUCKET}" não existe — crie-o no painel do Supabase` : `falha no upload: ${error.message}`);
 }
 
 /** Lê o arquivo. Chame SOMENTE depois de confirmar via RLS que o usuário pode ver o documento. */

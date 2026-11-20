@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { addMonths, monthLabel } from "@/lib/domain/dates";
+import { addMonths, monthLabel , capitalizeFirst} from "@/lib/domain/dates";
 import type { View } from "@/lib/services/types";
 
 const VIEWS: { v: View; label: string }[] = [
@@ -17,7 +17,7 @@ export function MonthViewSelector({ base, month, view }: { base: string; month: 
         <Link href={href(addMonths(month, -1), view)} aria-label="Mês anterior" className="grid h-8 w-8 place-items-center rounded-lg text-ink-2 hover:bg-surface-solid hover:text-ink">
           <ChevronLeft aria-hidden className="h-4 w-4" />
         </Link>
-        <span className="min-w-36 px-2 text-center text-sm font-medium capitalize">{monthLabel(month)}</span>
+        <span className="min-w-36 px-2 text-center text-sm font-medium">{capitalizeFirst(monthLabel(month))}</span>
         <Link href={href(addMonths(month, 1), view)} aria-label="Próximo mês" className="grid h-8 w-8 place-items-center rounded-lg text-ink-2 hover:bg-surface-solid hover:text-ink">
           <ChevronRight aria-hidden className="h-4 w-4" />
         </Link>

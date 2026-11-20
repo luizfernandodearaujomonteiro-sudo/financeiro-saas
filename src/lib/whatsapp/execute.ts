@@ -45,7 +45,7 @@ export async function executeCommand(sender: Sender, cmd: Command, now = new Dat
         const settings = await db.one<{ whatsapp_undo_minutes: number }>("select whatsapp_undo_minutes from public.fam_household_settings where household_id = $1", [sender.householdId]);
         const cat = cats.find((c) => c.id === categoryId)?.name ?? "sem categoria";
         return [
-          `✅ ${cmd.kind === "despesa" ? "Gasto" : "Receita"} registrada: *${formatBRL(cmd.amountCents)}* — ${cmd.description} (${cat})` +
+          `✅ ${cmd.kind === "despesa" ? "Gasto registrado" : "Receita registrada"}: *${formatBRL(cmd.amountCents)}* — ${cmd.description} (${cat})` +
             `\n${cmd.shared ? "🏠 Compartilhado com a família" : "🔒 Pessoal (só você vê)"}` +
             `\nErrou? Envie *desfazer* em até ${settings?.whatsapp_undo_minutes ?? DEFAULT_UNDO_MINUTES} min.`,
         ];

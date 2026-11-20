@@ -21,7 +21,8 @@ export async function sendSimulatedAction(_p: ActionState, fd: FormData): Promis
 }
 
 function localOnly() {
-  if (!env.simulatorEnabled) throw new Error("Disponível apenas com o simulador ativo.");
+  // jobs com privilégio de serviço: somente no modo local de desenvolvimento
+  if (!env.localDevAuth) throw new Error("Disponível apenas no modo local (LOCAL_DEV_AUTH=true).");
 }
 
 export async function runAlertsAction(): Promise<ActionState> {

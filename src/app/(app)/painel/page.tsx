@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, CalendarClock, CreditCard, Inbox, LayoutDashboard, PiggyBank, Scale, Target, Wallet } from "lucide-react";
 import { requireCtx } from "@/lib/auth/member";
-import { currentMonthStart, diffDays, formatDateBR, monthLabel, normalizeMonthParam, todayISO } from "@/lib/domain/dates";
+import { capitalizeFirst, currentMonthStart, diffDays, formatDateBR, monthLabel, normalizeMonthParam, todayISO } from "@/lib/domain/dates";
 import { formatBp } from "@/lib/domain/money";
 import { listBills } from "@/lib/services/bills";
 import { currentInvoices } from "@/lib/services/cards";
@@ -45,7 +45,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
     <div className="space-y-6">
       <PageHeader
         title={`Olá, ${member.displayName}`}
-        subtitle={<span className="capitalize">{monthLabel(month)} · {member.householdName}</span>}
+        subtitle={`${capitalizeFirst(monthLabel(month))} · ${member.householdName}`}
         icon={LayoutDashboard}
         actions={<><ViewSwitcher base="/painel" view={view} month={month} /><MonthNav base="/painel" view={view} month={month} /></>}
       />
@@ -76,7 +76,7 @@ export default async function Painel({ searchParams }: { searchParams: Promise<{
                   <p className="text-xs text-ink-3">{t.label}</p>
                   <t.icon aria-hidden className={`h-4 w-4 ${t.tone}`} />
                 </div>
-                {t.na ? <p className="mt-2 text-sm text-ink-3">Sem margem positiva</p> : <AnimatedMoney cents={t.cents} className="mt-2 block text-2xl font-bold" />}
+                {t.na ? <p className="mt-2 text-sm text-ink-3">Sem margem positiva</p> : <AnimatedMoney cents={t.cents} className="mt-2 block text-lg font-bold whitespace-nowrap sm:text-2xl" />}
               </Card>
             </StaggerItem>
           ))}

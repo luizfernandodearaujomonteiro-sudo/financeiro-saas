@@ -139,3 +139,8 @@ export function normalizeMonthParam(v: string | undefined | null): MonthStart | 
   if (mo < 1 || mo > 12) return null;
   return `${m[1]}-${m[2]}-01`;
 }
+
+/** "novembro de 2026" -> "Novembro de 2026" (somente a primeira letra). */
+export function capitalizeFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}

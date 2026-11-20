@@ -110,6 +110,8 @@ body {
   opacity: 0.55;
 }
 
+/* Classes de componente em @layer components: utilitários do Tailwind (fixed, absolute…) podem sobrescrevê-las. */
+@layer components {
 /* Cartão de vidro com borda em gradiente */
 .glass {
   position: relative;
@@ -147,6 +149,8 @@ body {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
 }
 
 /* Foco sempre visível */

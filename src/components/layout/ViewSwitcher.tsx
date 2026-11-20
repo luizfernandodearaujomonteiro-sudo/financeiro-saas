@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { addMonths, monthLabel } from "@/lib/domain/dates";
+import { addMonths, capitalizeFirst, monthLabel } from "@/lib/domain/dates";
 import type { View } from "@/lib/services/types";
 
 const VIEWS: { v: View; label: string; hint: string }[] = [
@@ -33,7 +33,7 @@ export function MonthNav({ base, view, month }: { base: string; view: View; mont
   return (
     <div className="inline-flex items-center gap-1 rounded-xl bg-surface-2 p-1 ring-1 ring-line">
       <Link href={link(addMonths(month, -1))} aria-label="Mês anterior" className="rounded-lg p-1.5 text-ink-3 hover:text-ink"><ChevronLeft aria-hidden className="h-4 w-4" /></Link>
-      <span className="min-w-36 text-center text-sm font-medium capitalize">{monthLabel(month)}</span>
+      <span className="min-w-36 text-center text-sm font-medium">{capitalizeFirst(monthLabel(month))}</span>
       <Link href={link(addMonths(month, 1))} aria-label="Próximo mês" className="rounded-lg p-1.5 text-ink-3 hover:text-ink"><ChevronRight aria-hidden className="h-4 w-4" /></Link>
     </div>
   );
