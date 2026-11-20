@@ -160,6 +160,10 @@ create table if not exists public.fam_entries (
   source              text not null default 'manual' check (source in ('manual', 'whatsapp', 'gmail', 'pluggy', 'importacao')),
   external_id         text,
   notes               text check (notes is null or char_length(notes) <= 500),
+  -- Pagamento de fatura / transferência entre contas da mesma pessoa: aparece na lista,
+  -- mas NÃO entra em receitas/despesas (evita contar duas vezes). O usuário pode alternar.
+  exclude_from_reports boolean not null default false,
+  exclude_reason      text check (exclude_reason is null or exclude_reason in ('pagamento_fatura', 'transferencia', 'manual')),
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
   foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade,

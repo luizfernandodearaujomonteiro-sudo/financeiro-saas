@@ -1,16 +1,17 @@
 import { withUser } from "../db";
 import { addMonths, type MonthStart } from "../domain/dates";
 import { compareMembers } from "../domain/comparison";
-import { groupSum, monthlySeries, summarize } from "../domain/reports";
+import { countsInReports, expenseValue, groupSum, monthlySeries, summarize } from "../domain/reports";
 import { listEntriesBetween, listEntriesForMonth } from "./entries";
 import type { MemberCtx, View } from "./types";
 
 export async function monthReport(ctx: MemberCtx, month: MonthStart, view: View) {
   const entries = await listEntriesForMonth(ctx, month, view);
   const summary = summarize(entries);
-  const byCat = groupSum(entries.filter((e) => e.kind === "despesa"), (e) => e.category_name ?? "Sem categoria", (e) => e.amount_cents);
+  // despesas por categoria: estornos de cartão abatem da categoria; pagamentos de fatura/transferências ficam de fora
+  const byCat = groupSum(entries.filter((e) => countsInReports(e) && expenseValue(e) !== 0), (e) => e.category_name ?? "Sem categoria", (e) => expenseValue(e));
   const colors = new Map(entries.map((e) => [e.category_name ?? "Sem categoria", e.category_color ?? "#64748b"]));
-  const categories = [...byCat.entries()].map(([name, cents]) => ({ name, cents, color: colors.get(name) ?? "#64748b" })).sort((a, b) => b.cents - a.cents);
+  const categories = [...byCat.entries()].filter(([, cents]) => cents > 0).map(([name, cents]) => ({ name, cents, color: colors.get(name) ?? "#64748b" })).sort((a, b) => b.cents - a.cents);
   return { entries, summary, categories };
 }
 
@@ -35,10 +36,10 @@ export async function membersComparison(ctx: MemberCtx, month: MonthStart, mode:
   // por categoria, por membro (somente compartilhados)
   const cats = new Map<string, Map<string, number>>();
   for (const e of entries) {
-    if (e.visibility !== "compartilhado" || e.kind !== "despesa") continue;
+    if (e.visibility !== "compartilhado" || !countsInReports(e) || expenseValue(e) === 0) continue;
     const c = e.category_name ?? "Sem categoria";
     if (!cats.has(c)) cats.set(c, new Map());
-    cats.get(c)!.set(e.owner_id, (cats.get(c)!.get(e.owner_id) ?? 0) + e.amount_cents);
+    cats.get(c)!.set(e.owner_id, (cats.get(c)!.get(e.owner_id) ?? 0) + expenseValue(e));
   }
   return { ...result, byCategory: [...cats.entries()].map(([name, m]) => ({ name, perMember: Object.fromEntries(m) })) };
 }

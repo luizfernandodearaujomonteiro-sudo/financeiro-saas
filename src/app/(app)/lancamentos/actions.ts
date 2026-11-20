@@ -2,7 +2,7 @@
 import { requireCtx } from "@/lib/auth/member";
 import { formObject, run, type ActionState } from "@/lib/actions";
 import { createCardPurchase } from "@/lib/services/cards";
-import { createEntry, deleteEntry, setEntryVisibility, updateEntry } from "@/lib/services/entries";
+import { createEntry, deleteEntry, setEntryExclusion, setEntryVisibility, updateEntry } from "@/lib/services/entries";
 
 const PATHS = ["/lancamentos", "/painel", "/cartoes"];
 
@@ -43,4 +43,10 @@ export async function toggleVisibilityAction(fd: FormData) {
 export async function deleteEntryAction(fd: FormData) {
   const c = await ctx();
   await run(() => deleteEntry(c, String(fd.get("id"))).then(() => undefined), PATHS);
+}
+
+/** Alterna "pagamento de fatura / transferência" (fora dos relatórios). */
+export async function toggleExclusionAction(fd: FormData) {
+  const c = await ctx();
+  await run(() => setEntryExclusion(c, String(fd.get("id")), fd.get("exclude") === "true"), [...PATHS, "/relatorios"]);
 }

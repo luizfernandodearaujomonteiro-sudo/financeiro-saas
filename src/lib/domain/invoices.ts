@@ -79,3 +79,28 @@ export function invoiceDisplayStatus(inv: { status: string; closingDate: ISODate
 export function daysUntil(today: ISODate, date: ISODate): number {
   return diffDays(today, date);
 }
+
+/**
+ * Fatura de uma parcela quando só se conhece a data da COMPRA ORIGINAL e o número
+ * da parcela (caso comum no Open Finance e nas faturas em PDF): fatura da 1ª parcela
+ * deslocada (n - 1) meses.
+ */
+export function installmentSlot(card: CardCycle, purchaseDate: ISODate, installmentNumber: number | null | undefined): InvoiceSlot {
+  const first = assignInvoice(card, purchaseDate);
+  const shift = Math.max(1, installmentNumber ?? 1) - 1;
+  if (!shift) return first;
+  const { y, m } = parseISODate(first.closingDate);
+  const c = addMonthsYM(y, m, shift);
+  return invoiceForClosingMonth(card, c.y, c.m);
+}
+
+/**
+ * Fatura do ciclo cujo vencimento cai no mês de `dueDate` (ex.: billId da Pluggy).
+ * Usa o vencimento real informado pelo banco quando ele é >= fechamento calculado.
+ */
+export function slotForDueDate(card: CardCycle, dueDate: ISODate): InvoiceSlot {
+  const { y, m } = parseISODate(dueDate);
+  const closing = card.dueDay > card.closingDay ? { y, m } : addMonthsYM(y, m, -1);
+  const slot = invoiceForClosingMonth(card, closing.y, closing.m);
+  return dueDate >= slot.closingDate ? { ...slot, dueDate } : slot;
+}

@@ -52,8 +52,11 @@ export async function executeCommand(sender: Sender, cmd: Command, now = new Dat
       }
       case "saldo": {
         const month = currentMonthStart(now);
-        const rows = await db.query<{ kind: "receita" | "despesa"; amount_cents: number; cost_type: "fixa" | "variavel"; owner_id: string; visibility: "pessoal" | "compartilhado" }>(
-          "select kind, amount_cents, cost_type, owner_id, visibility from public.fam_entries where household_id = $1 and budget_month = $2",
+        const rows = await db.query<{
+          kind: "receita" | "despesa"; amount_cents: number; cost_type: "fixa" | "variavel"; owner_id: string; visibility: "pessoal" | "compartilhado";
+          payment_method: string; card_id: string | null; exclude_from_reports: boolean;
+        }>(
+          "select kind, amount_cents, cost_type, owner_id, visibility, payment_method, card_id, exclude_from_reports from public.fam_entries where household_id = $1 and budget_month = $2",
           [sender.householdId, month],
         );
         const mine = summarize(rows.filter((r) => r.owner_id === sender.userId));

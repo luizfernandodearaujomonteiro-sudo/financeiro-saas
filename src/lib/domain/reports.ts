@@ -10,6 +10,7 @@
  *  Ponto de equilíbrio = Fixas / (MC / Receitas)  => receita mínima para cobrir tudo
  */
 import { basisPoints, mulDivRound, type Cents } from "./money";
+import { isCardRefund } from "./transfers";
 
 export interface ReportEntry {
   kind: "receita" | "despesa";
@@ -19,6 +20,24 @@ export interface ReportEntry {
   owner_id?: string;
   budget_month?: string;
   visibility?: "pessoal" | "compartilhado";
+  payment_method?: string | null;
+  card_id?: string | null;
+  /** Pagamento de fatura / transferência entre contas próprias: fora dos relatórios. */
+  exclude_from_reports?: boolean | null;
+}
+
+/** Entra nos relatórios? (pagamentos de fatura e transferências próprias não entram). */
+export function countsInReports(e: Pick<ReportEntry, "exclude_from_reports">): boolean {
+  return !e.exclude_from_reports;
+}
+
+/**
+ * Valor com sinal como DESPESA: despesa = +valor; estorno no cartão = -valor
+ * (reduz a despesa em vez de inflar receitas); receita comum = 0.
+ */
+export function expenseValue(e: Pick<ReportEntry, "kind" | "amount_cents" | "payment_method" | "card_id">): Cents {
+  if (e.kind === "despesa") return e.amount_cents;
+  return isCardRefund(e) ? -e.amount_cents : 0;
 }
 
 export interface MonthlySummary {
@@ -40,9 +59,15 @@ export function summarize(entries: readonly ReportEntry[]): MonthlySummary {
   let receitas = 0, fixas = 0, variaveis = 0;
   for (const e of entries) {
     if (!Number.isSafeInteger(e.amount_cents)) throw new Error("valor não inteiro");
-    if (e.kind === "receita") receitas += e.amount_cents;
-    else if (e.cost_type === "fixa") fixas += e.amount_cents;
-    else variaveis += e.amount_cents;
+    if (!countsInReports(e)) continue; // pagamento de fatura / transferência própria
+    if (e.kind === "receita" && !isCardRefund(e)) {
+      receitas += e.amount_cents;
+      continue;
+    }
+    // despesa, ou estorno no cartão (valor negativo: reduz a despesa)
+    const v = expenseValue(e);
+    if (e.cost_type === "fixa") fixas += v;
+    else variaveis += v;
   }
   const despesas = fixas + variaveis;
   const mc = receitas - variaveis;

@@ -111,9 +111,13 @@ export async function runWeeklySummary(now = new Date()) {
     for (const r of await recipients(db)) {
       if (!(await claim(db, r.user_id, "weekly", today))) continue;
       // visível ao destinatário: compartilhados da família + os pessoais dele
+      // despesas (estornos de cartão abatem; pagamentos de fatura/transferências próprias ficam de fora)
       const rows = await db.query<{ amount_cents: number; occurred_on: string; category: string | null }>(
-        `select e.amount_cents, e.occurred_on, c.name as category from public.fam_entries e left join public.fam_categories c on c.id = e.category_id
-          where e.household_id = $1 and e.kind = 'despesa' and e.occurred_on between $2 and $3
+        `select case when e.kind = 'despesa' then e.amount_cents else -e.amount_cents end as amount_cents, e.occurred_on, c.name as category
+           from public.fam_entries e left join public.fam_categories c on c.id = e.category_id
+          where e.household_id = $1 and e.occurred_on between $2 and $3
+            and not e.exclude_from_reports
+            and (e.kind = 'despesa' or (e.kind = 'receita' and (e.payment_method = 'cartao_credito' or e.card_id is not null)))
             and (e.visibility = 'compartilhado' or e.owner_id = $4)`,
         [r.household_id, prevFrom, today, r.user_id],
       );

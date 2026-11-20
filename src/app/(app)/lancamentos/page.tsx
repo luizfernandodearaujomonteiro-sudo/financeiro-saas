@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Eye, EyeOff, Pencil, Plus, Repeat, Trash2 } from "lucide-react";
 import { requireCtx } from "@/lib/auth/member";
 import { currentMonthStart, formatDateBR, normalizeMonthParam, todayISO } from "@/lib/domain/dates";
 import { centsToInput } from "@/lib/domain/money";
@@ -11,7 +11,7 @@ import { MonthNav, ViewSwitcher } from "@/components/layout/ViewSwitcher";
 import { ActionForm, Disclosure, SubmitButton } from "@/components/ui/client";
 import { AnimatedMoney, Stagger, StaggerItem } from "@/components/ui/motion";
 import { Badge, Card, CardTitle, EmptyState, Field, Input, Money, PageHeader, Select, VisibilityBadge } from "@/components/ui/primitives";
-import { createEntryAction, deleteEntryAction, toggleVisibilityAction, updateEntryAction } from "./actions";
+import { createEntryAction, deleteEntryAction, toggleExclusionAction, toggleVisibilityAction, updateEntryAction } from "./actions";
 import { EntryForm } from "./EntryForm";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +21,7 @@ const METHOD_LABEL: Record<string, string> = {
   pix: "Pix", cartao_credito: "Crédito", cartao_debito: "Débito", boleto: "Boleto", dinheiro: "Dinheiro", transferencia: "Transferência", debito_automatico: "Déb. automático",
 };
 const SOURCE_LABEL: Record<string, string> = { whatsapp: "WhatsApp", pluggy: "Open Finance", gmail: "Fatura", importacao: "Importado" };
+const EXCLUDE_LABEL: Record<string, string> = { pagamento_fatura: "Pagamento de fatura", transferencia: "Transferência entre contas", manual: "Fora dos relatórios" };
 
 export default async function Lancamentos({ searchParams }: { searchParams: Promise<{ visao?: string; mes?: string }> }) {
   const sp = await searchParams;
@@ -69,10 +70,14 @@ export default async function Lancamentos({ searchParams }: { searchParams: Prom
                                   {e.card_nickname && <Badge tone="brand">{e.card_nickname}{e.installment_total ? ` · ${e.installment_number}/${e.installment_total}` : ""}</Badge>}
                                   {SOURCE_LABEL[e.source] && <Badge tone="good">{SOURCE_LABEL[e.source]}</Badge>}
                                   {e.cost_type === "fixa" && <Badge>Fixo</Badge>}
+                                  {e.exclude_from_reports && (
+                                    <Badge tone="warn"><Repeat aria-hidden className="h-3 w-3" /> {EXCLUDE_LABEL[e.exclude_reason ?? "manual"]} · fora dos relatórios</Badge>
+                                  )}
+                                  {!e.exclude_from_reports && e.kind === "receita" && e.card_id && <Badge tone="good">Estorno (reduz despesa)</Badge>}
                                 </div>
                               </div>
                             </div>
-                            <Money cents={e.kind === "receita" ? e.amount_cents : -e.amount_cents} sign className={`shrink-0 font-semibold ${e.kind === "receita" ? "text-good" : ""}`} />
+                            <Money cents={e.kind === "receita" ? e.amount_cents : -e.amount_cents} sign className={`shrink-0 font-semibold ${e.exclude_from_reports ? "text-ink-3 line-through decoration-1" : e.kind === "receita" ? "text-good" : ""}`} />
                           </div>
                           {mine && (
                             <div className="mt-2 border-t border-line pt-2">
@@ -102,6 +107,14 @@ export default async function Lancamentos({ searchParams }: { searchParams: Prom
                                     <button className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 text-xs ring-1 ring-line hover:ring-line-strong">
                                       {e.visibility === "pessoal" ? <Eye aria-hidden className="h-3.5 w-3.5" /> : <EyeOff aria-hidden className="h-3.5 w-3.5" />}
                                       {e.visibility === "pessoal" ? "Compartilhar com a família" : "Tornar pessoal"}
+                                    </button>
+                                  </form>
+                                  <form action={toggleExclusionAction}>
+                                    <input type="hidden" name="id" value={e.id} />
+                                    <input type="hidden" name="exclude" value={e.exclude_from_reports ? "false" : "true"} />
+                                    <button className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 text-xs ring-1 ring-line hover:ring-line-strong">
+                                      <Repeat aria-hidden className="h-3.5 w-3.5" />
+                                      {e.exclude_from_reports ? "Contar nos relatórios" : "Marcar como pagamento de fatura / transferência"}
                                     </button>
                                   </form>
                                   <form action={deleteEntryAction}>

@@ -26,13 +26,15 @@ export interface EntryRow {
   source: string;
   notes: string | null;
   created_at: string;
+  exclude_from_reports: boolean;
+  exclude_reason: "pagamento_fatura" | "transferencia" | "manual" | null;
 }
 
 export const ENTRY_SELECT = `
   select e.id, e.owner_id, p.display_name as owner_name, e.visibility, e.kind, e.description, e.amount_cents,
          e.occurred_on, e.budget_month, e.category_id, c.name as category_name, c.color as category_color,
          e.payment_method, e.cost_type, e.card_id, cd.nickname as card_nickname, e.installment_number,
-         e.installment_total, e.source, e.notes, e.created_at
+         e.installment_total, e.source, e.notes, e.created_at, e.exclude_from_reports, e.exclude_reason
     from public.fam_entries e
     join public.fam_profiles p on p.id = e.owner_id
     left join public.fam_categories c on c.id = e.category_id
@@ -94,6 +96,16 @@ export async function updateEntry(ctx: MemberCtx, id: string, raw: unknown) {
 
 export async function setEntryVisibility(ctx: MemberCtx, id: string, vis: "pessoal" | "compartilhado") {
   await withUser(ctx.userId, (db) => db.query("update public.fam_entries set visibility = $2 where id = $1 and owner_id = auth.uid()", [id, vis]));
+}
+
+/** Marca/desmarca "pagamento de fatura / transferência" (fora dos relatórios). Só o dono. */
+export async function setEntryExclusion(ctx: MemberCtx, id: string, exclude: boolean) {
+  await withUser(ctx.userId, (db) =>
+    db.query(
+      "update public.fam_entries set exclude_from_reports = $2, exclude_reason = case when $2 then coalesce(exclude_reason, 'manual') else null end where id = $1 and owner_id = auth.uid()",
+      [id, exclude],
+    ),
+  );
 }
 
 export async function deleteEntry(ctx: MemberCtx, id: string) {
