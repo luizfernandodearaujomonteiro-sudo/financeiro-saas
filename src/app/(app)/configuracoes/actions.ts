@@ -14,6 +14,7 @@ import { encodeTheme, THEME_COOKIE } from "@/lib/theme-cookie";
 import { getOwnerProvider, getPublicConfigAsUser } from "@/lib/whatsapp/config";
 import { sendMessages } from "@/lib/whatsapp/send";
 import { optionalText } from "@/lib/validation";
+import { clearPdfPassword, savePdfPassword } from "@/lib/services/pdf-password";
 
 async function load() {
   const { member } = await requireCtx();
@@ -195,4 +196,21 @@ export async function syncGmailMockAction(): Promise<ActionState> {
     const items = (r.summary ?? []).reduce((a, s) => a + s.items, 0);
     return `Sincronização simulada concluída: ${items} item(ns) novo(s) na fila de revisão.`;
   }, [PATH, "/revisao"]);
+}
+
+// ----------------------------- Senha dos PDFs (Gmail) -----------------------------
+export async function savePdfPasswordAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  const { ctx } = await load();
+  return run(async () => {
+    await savePdfPassword(ctx, String(fd.get("pdfPassword") ?? ""));
+    return "Senha dos PDFs salva (cifrada).";
+  }, [PATH]);
+}
+
+export async function clearPdfPasswordAction(): Promise<ActionState> {
+  const { ctx } = await load();
+  return run(async () => {
+    await clearPdfPassword(ctx);
+    return "Senha dos PDFs removida.";
+  }, [PATH]);
 }

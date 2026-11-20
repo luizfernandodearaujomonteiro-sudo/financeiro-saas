@@ -1,10 +1,11 @@
-import { Check, FileText, History, Inbox, Upload, X } from "lucide-react";
+import { Check, FileText, FileWarning, History, Inbox, Upload, X } from "lucide-react";
 import { requireCtx } from "@/lib/auth/member";
 import { formatDateBR } from "@/lib/domain/dates";
 import { centsToInput } from "@/lib/domain/money";
 import { listCards } from "@/lib/services/cards";
 import { listCategories } from "@/lib/services/categories";
 import { listReview } from "@/lib/services/review";
+import { withUser } from "@/lib/db";
 import { ActionForm, SubmitButton } from "@/components/ui/client";
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
 import { Badge, Card, CardTitle, EmptyState, Field, Input, Money, PageHeader, Select } from "@/components/ui/primitives";
@@ -18,7 +19,16 @@ const SOURCE: Record<string, string> = { gmail: "Gmail", upload: "PDF enviado", 
 export default async function RevisaoPage() {
   const { member } = await requireCtx();
   const ctx = { userId: member.userId, householdId: member.householdId };
-  const [items, cards, categories] = await Promise.all([listReview(ctx, "todas"), listCards(ctx), listCategories(ctx)]);
+  const [items, cards, categories, problemDocs] = await Promise.all([
+    listReview(ctx, "todas"),
+    listCards(ctx),
+    listCategories(ctx),
+    withUser(member.userId, (db) =>
+      db.query<{ id: string; file_name: string | null; source: string; parse_error: string; created_at: Date }>(
+        "select id, file_name, source, parse_error, created_at from public.fam_invoice_documents where owner_id = auth.uid() and parse_error is not null order by created_at desc limit 10",
+      ),
+    ),
+  ]);
   const pending = items.filter((i) => i.status === "pendente");
   const history = items.filter((i) => i.status !== "pendente").slice(0, 15);
   const activeCards = cards.filter((c) => c.active);
@@ -116,11 +126,32 @@ export default async function RevisaoPage() {
                     {activeCards.map((c) => <option key={c.id} value={c.id}>{c.nickname} •••• {c.last4}</option>)}
                   </Select>
                 </Field>
+                <Field label="Senha do PDF (se houver)" hint="Usada só agora, para abrir o arquivo — não é guardada.">
+                  <Input name="pdfPassword" type="password" autoComplete="off" maxLength={64} placeholder="ex.: dígitos do CPF" />
+                </Field>
                 <SubmitButton className="w-full" pendingText="Lendo PDF…">Importar</SubmitButton>
-                <p className="text-[11px] text-ink-3">O PDF fica guardado de forma privada (só você acessa). PDFs com senha ainda não são suportados.</p>
+                <p className="text-[11px] text-ink-3">O PDF fica guardado de forma privada (só você acessa).</p>
               </ActionForm>
             </Card>
           </FadeIn>
+          {problemDocs.length > 0 && (
+            <Card>
+              <CardTitle icon={FileWarning}>Faturas que não puderam ser lidas</CardTitle>
+              <ul className="space-y-3 text-sm">
+                {problemDocs.map((d) => (
+                  <li key={d.id} className="rounded-xl bg-warn/10 p-3 ring-1 ring-warn/30">
+                    <p className="font-medium">{d.file_name ?? "fatura.pdf"} <span className="text-xs text-ink-3">({d.source === "gmail" ? "Gmail" : "upload"})</span></p>
+                    <p className="text-warn">{d.parse_error}</p>
+                    {d.parse_error.startsWith("PDF protegido") || d.parse_error.startsWith("Senha do PDF") ? (
+                      <p className="mt-1 text-xs text-ink-2">
+                        Envie o mesmo PDF aqui ao lado informando a senha, ou cadastre a senha dos PDFs em <a className="text-brand underline" href="/configuracoes#gmail">Configurações › Gmail</a> para a próxima sincronização ler automaticamente.
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
           <Card>
             <CardTitle icon={History}>Revisados recentemente</CardTitle>
             {history.length === 0 ? (

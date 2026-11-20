@@ -13,7 +13,7 @@ import { freshTestDb } from "../support/db";
 import { authenticate, localVerifier } from "@/lib/auth/core";
 import { loadMembership } from "@/lib/auth/member";
 import { withService, withUser } from "@/lib/db";
-import { addDays, currentMonthStart, monthStartOf, todayISO } from "@/lib/domain/dates";
+import { addDays, currentMonthStart, formatDateBR, monthStartOf, todayISO } from "@/lib/domain/dates";
 import { assignInvoice, installmentSlot } from "@/lib/domain/invoices";
 import { summarize } from "@/lib/domain/reports";
 import { bancarioBarcodeToLine, buildBancarioBarcode, dateToFactor } from "@/lib/domain/boleto";
@@ -27,6 +27,8 @@ import { membersComparison } from "@/lib/services/reports";
 import { approveReview, listReview, rejectReview } from "@/lib/services/review";
 import { recentSearches, saveSearch, searchEntries } from "@/lib/services/search";
 import { ingestDocument } from "@/lib/importers/pdf";
+import { clearPdfPassword, hasPdfPassword, pdfPasswordForJob, savePdfPassword } from "@/lib/services/pdf-password";
+import { makePdf } from "../support/pdf";
 import { mockStatementText } from "@/lib/gmail/sync";
 import { createMockItem, setAccountVisibility } from "@/lib/pluggy/service";
 import { runDailyReminder, runDueAlerts, runWeeklySummary } from "@/lib/whatsapp/notifications";
@@ -157,6 +159,38 @@ describe("5. fila de revisão (fatura PDF/Gmail)", () => {
     const estorno = pending.find((p) => p.kind === "receita")!;
     await rejectReview(L(), estorno.id);
     expect((await listReview(E())).length).toBe(0); // fila é só do dono
+  });
+});
+
+describe("5b. PDF de fatura protegido por senha", () => {
+  const d = (n: number) => formatDateBR(addDays(todayISO(), -n)).slice(0, 5);
+  const lines = () => ["FATURA PROTEGIDA", `${d(3)}  ACOUGUE BOI GORDO  98,40`, `${d(5)}  LIVRARIA CULTURA  59,90`];
+  it("sem senha: guarda o documento com parse_error; com a senha certa: reprocessa e coloca na revisão", async () => {
+    const pdf = makePdf(lines(), { userPassword: "52998224725" });
+    const r1 = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload" });
+    expect(r1).toMatchObject({ duplicate: false, parseError: "PDF protegido por senha", inserted: 0 });
+    const doc = await withUser(luiz.id, (db) => db.one<{ parse_error: string }>("select parse_error from fam_invoice_documents where id = $1", [r1.documentId]));
+    expect(doc?.parse_error).toBe("PDF protegido por senha");
+    const wrong = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload", password: "000" });
+    expect(wrong.parseError).toBe("Senha do PDF incorreta");
+    const ok = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload", password: "52998224725" });
+    expect(ok).toMatchObject({ duplicate: false, parseError: null, inserted: 2, reprocessed: true, documentId: r1.documentId });
+    const fixed = await withUser(luiz.id, (db) => db.one<{ parse_error: string | null; parsed_items: number }>("select parse_error, parsed_items from fam_invoice_documents where id = $1", [r1.documentId]));
+    expect(fixed).toEqual({ parse_error: null, parsed_items: 2 });
+    // de novo, depois de lido: duplicado
+    expect((await ingestDocument(L(), { bytes: pdf, fileName: "x.pdf", source: "upload", password: "52998224725" })).duplicate).toBe(true);
+  });
+  it("senha do PDF por perfil fica cifrada e só o job a lê", async () => {
+    await savePdfPassword(L(), "52998224725");
+    expect(await hasPdfPassword(L())).toBe(true);
+    expect(await hasPdfPassword(E())).toBe(false);
+    const raw = await withService((db) => db.one<{ password_enc: string }>("select password_enc from fam_pdf_passwords where user_id = $1", [luiz.id]));
+    expect(raw?.password_enc).toMatch(/^v1\./);
+    expect(raw?.password_enc).not.toContain("52998224725");
+    expect(await pdfPasswordForJob(luiz.id)).toBe("52998224725");
+    await expect(withUser(luiz.id, (db) => db.query("select * from fam_pdf_passwords"))).rejects.toThrow(/permission denied/);
+    await clearPdfPassword(L());
+    expect(await hasPdfPassword(L())).toBe(false);
   });
 });
 

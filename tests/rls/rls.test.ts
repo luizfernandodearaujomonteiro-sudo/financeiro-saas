@@ -228,7 +228,7 @@ describe("cartões, faturas e contas", () => {
 });
 
 describe("segredos e tabelas internas", () => {
-  it.each(["fam_oauth_tokens", "fam_whatsapp_secrets", "fam_login_attempts", "fam_whatsapp_inbound", "fam_notification_log"])("%s é inacessível para usuários", async (t) => {
+  it.each(["fam_oauth_tokens", "fam_whatsapp_secrets", "fam_login_attempts", "fam_whatsapp_inbound", "fam_notification_log", "fam_pdf_passwords"])("%s é inacessível para usuários", async (t) => {
     await expect(asUser(app, luiz.id, (c) => c.query(`select * from ${t}`))).rejects.toThrow(/permission denied/);
   });
   it("só o dono lê os segredos cifrados do WhatsApp via RPC", async () => {

@@ -10,6 +10,7 @@ import { env } from "../env";
 import { ingestDocument } from "../importers/pdf";
 import { decryptSecret } from "../security/crypto";
 import { refreshAccessToken } from "./oauth";
+import { pdfPasswordForJob } from "../services/pdf-password";
 
 export const GMAIL_QUERY = 'has:attachment filename:pdf newer_than:45d (fatura OR "cartão de crédito" OR "cartao de credito")';
 
@@ -82,8 +83,9 @@ export async function runGmailSync() {
       } else {
         if (!c.refresh_token_enc) throw new Error("sem token");
         const access = await refreshAccessToken(decryptSecret(c.refresh_token_enc));
+        const pdfPassword = await pdfPasswordForJob(c.user_id); // opcional, só em memória
         for (const a of await listGmailAttachments(access)) {
-          const r = await ingestDocument(ctx, { bytes: a.bytes, fileName: a.fileName, source: "gmail", gmailMessageId: a.messageId });
+          const r = await ingestDocument(ctx, { bytes: a.bytes, fileName: a.fileName, source: "gmail", gmailMessageId: a.messageId, password: pdfPassword });
           docs += r.duplicate ? 0 : 1;
           items += r.inserted;
         }

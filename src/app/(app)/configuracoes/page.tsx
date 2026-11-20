@@ -5,13 +5,14 @@ import { formatPhoneBR } from "@/lib/domain/phone";
 import { env } from "@/lib/env";
 import { getSettings, listMembers } from "@/lib/services/household";
 import { getPrefs } from "@/lib/services/prefs";
+import { hasPdfPassword } from "@/lib/services/pdf-password";
 import { EVOLUTION_DEFAULTS, getPublicConfigAsUser } from "@/lib/whatsapp/config";
 import { ActionForm, CopyButton, SubmitButton } from "@/components/ui/client";
 import { FadeIn } from "@/components/ui/motion";
 import { Badge, Card, CardTitle, Field, Input, LinkButton, PageHeader, Select } from "@/components/ui/primitives";
 import {
   checkConnectionAction, connectQrAction, createInviteAction, disconnectGmailAction, saveMessagePrefsAction, saveSettingsAction, saveThemeAction, saveWhatsappConfigAction,
-  setPhoneAction, setWebhookAction, syncGmailMockAction, testWhatsappAction, updateNameAction,
+  setPhoneAction, setWebhookAction, syncGmailMockAction, testWhatsappAction, updateNameAction, savePdfPasswordAction, clearPdfPasswordAction,
 } from "./actions";
 import { ActionButton, InviteBox, QrBox } from "./ResultBoxes";
 
@@ -44,7 +45,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
   const ctx = { userId: member.userId, householdId: member.householdId };
   const isOwner = member.role === "owner";
   const { gmail } = await searchParams;
-  const [prefs, members, settings, wa, gmailConn] = await Promise.all([
+  const [prefs, members, settings, wa, gmailConn, pdfPw] = await Promise.all([
     getPrefs(member.userId),
     listMembers(ctx),
     getSettings(ctx),
@@ -54,6 +55,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
         "select status, email, last_sync_at, last_error from public.fam_gmail_connections where user_id = auth.uid()",
       ),
     ),
+    hasPdfPassword(ctx),
   ]);
   const gmailMsg = gmail ? GMAIL_MSG[gmail] : undefined;
   const hours = Array.from({ length: 24 }, (_, h) => h);
@@ -270,7 +272,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
       </FadeIn>
 
       <FadeIn>
-        <Card>
+        <Card id="gmail">
           <CardTitle icon={Mail} action={<Badge tone={env.gmailMode === "live" ? "good" : env.gmailMode === "mock" ? "brand" : "neutral"}>Gmail: {env.gmailMode}</Badge>}>Gmail — faturas por e-mail</CardTitle>
           {gmailMsg && (
             <p role={gmailMsg.ok ? "status" : "alert"} className={`mb-3 rounded-xl px-3 py-2 text-sm ring-1 ${gmailMsg.ok ? "bg-good/10 text-good ring-good/30" : "bg-bad/10 text-bad ring-bad/30"}`}>{gmailMsg.text}</p>
@@ -295,6 +297,18 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
               )}
               {env.gmailMode === "mock" && env.localDevAuth && <ActionButton action={syncGmailMockAction} label={<><RefreshCw aria-hidden className="h-4 w-4" /> Sincronizar agora (mock)</>} pendingText="Sincronizando…" />}
             </div>
+          </div>
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="mb-1 text-xs font-semibold tracking-wide text-ink-2 uppercase">Senha dos PDFs de fatura (opcional)</p>
+            <p className="mb-3 text-xs text-ink-3">
+              Muitos bancos protegem a fatura com senha (geralmente dígitos do CPF). Se cadastrar, a sincronização do Gmail consegue ler esses PDFs.
+              A senha é guardada <b>cifrada</b> e nunca é exibida de volta. Status: {pdfPw ? <Badge tone="good">cadastrada</Badge> : <Badge>não cadastrada</Badge>}
+            </p>
+            <ActionForm action={savePdfPasswordAction} resetOnSuccess className="flex flex-wrap items-end gap-2">
+              <Field label="Nova senha" className="min-w-56 flex-1"><Input name="pdfPassword" type="password" autoComplete="off" maxLength={64} required /></Field>
+              <SubmitButton variant="secondary">Salvar senha</SubmitButton>
+            </ActionForm>
+            {pdfPw && <div className="mt-2"><ActionButton action={clearPdfPasswordAction} label="Remover senha" variant="danger" pendingText="Removendo…" /></div>}
           </div>
         </Card>
       </FadeIn>
