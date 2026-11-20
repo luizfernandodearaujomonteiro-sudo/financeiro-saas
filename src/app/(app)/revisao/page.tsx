@@ -6,6 +6,7 @@ import { listCards } from "@/lib/services/cards";
 import { listCategories } from "@/lib/services/categories";
 import { listReview } from "@/lib/services/review";
 import { withUser } from "@/lib/db";
+import { STORAGE_UNAVAILABLE_MESSAGE, storageAvailable } from "@/lib/storage";
 import { ActionForm, SubmitButton } from "@/components/ui/client";
 import { FadeIn, Stagger, StaggerItem } from "@/components/ui/motion";
 import { Badge, Card, CardTitle, EmptyState, Field, Input, Money, PageHeader, Select } from "@/components/ui/primitives";
@@ -19,6 +20,7 @@ const SOURCE: Record<string, string> = { gmail: "Gmail", upload: "PDF enviado", 
 export default async function RevisaoPage() {
   const { member } = await requireCtx();
   const ctx = { userId: member.userId, householdId: member.householdId };
+  const uploadEnabled = storageAvailable();
   const [items, cards, categories, problemDocs] = await Promise.all([
     listReview(ctx, "todas"),
     listCards(ctx),
@@ -116,7 +118,11 @@ export default async function RevisaoPage() {
           <FadeIn>
             <Card gradient>
               <CardTitle icon={Upload}>Enviar PDF de fatura</CardTitle>
+              {!uploadEnabled && (
+                <p role="status" className="mb-3 rounded-xl bg-warn/10 px-3 py-2 text-sm text-warn ring-1 ring-warn/30">{STORAGE_UNAVAILABLE_MESSAGE}</p>
+              )}
               <ActionForm action={uploadAction} resetOnSuccess className="space-y-3">
+                <fieldset disabled={!uploadEnabled} className="contents">
                 <Field label="Arquivo (PDF, até 8 MB)">
                   <input name="file" type="file" accept="application/pdf,.pdf" required className="block w-full text-sm text-ink-2 file:mr-3 file:h-9 file:rounded-lg file:border-0 file:bg-surface-2 file:px-3 file:text-sm file:text-ink file:ring-1 file:ring-line" />
                 </Field>
@@ -130,6 +136,7 @@ export default async function RevisaoPage() {
                   <Input name="pdfPassword" type="password" autoComplete="off" maxLength={64} placeholder="ex.: dígitos do CPF" />
                 </Field>
                 <SubmitButton className="w-full" pendingText="Lendo PDF…">Importar</SubmitButton>
+                </fieldset>
                 <p className="text-[11px] text-ink-3">O PDF fica guardado de forma privada (só você acessa).</p>
               </ActionForm>
             </Card>

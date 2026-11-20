@@ -23,7 +23,7 @@ import { createEntry, listEntriesForMonth } from "@/lib/services/entries";
 import { addContribution, listGoals } from "@/lib/services/goals";
 import { listPositions } from "@/lib/services/invest";
 import { computeAndSnapshot } from "@/lib/services/networth";
-import { membersComparison } from "@/lib/services/reports";
+import { membersComparison, monthReport } from "@/lib/services/reports";
 import { approveReview, listReview, rejectReview } from "@/lib/services/review";
 import { recentSearches, saveSearch, searchEntries } from "@/lib/services/search";
 import { createInvite, createMyHousehold } from "@/lib/services/household";
@@ -500,3 +500,38 @@ describe("10. onboarding: usuário local sem família cria a sua", () => {
     await expect(createMyHousehold(outro.id, { name: "", displayName: "x" })).rejects.toThrow();
   });
 });
+
+describe("11. produção sem SUPABASE_SERVICE_ROLE_KEY", () => {
+  it("upload de PDF fica indisponível com mensagem clara; login, painel, relatórios e onboarding seguem funcionando", async () => {
+    const prev = { driver: process.env.STORAGE_DRIVER, key: process.env.SUPABASE_SERVICE_ROLE_KEY, url: process.env.NEXT_PUBLIC_SUPABASE_URL };
+    process.env.STORAGE_DRIVER = "supabase";
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://exemplo.supabase.co";
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      const pdf = makePdf(["FATURA", "01/11  LOJA TESTE  10,00"]);
+      await expect(ingestDocument(L(), { bytes: pdf, fileName: "f.pdf", source: "upload" })).rejects.toThrow(/Upload de PDF indisponível/);
+      expect((await authenticate(luiz.email, luiz.password, "10.0.2.1", localVerifier)).ok).toBe(true);
+      expect((await loadMembership(luiz.id))?.householdId).toBe(HH);
+      const r = await monthReport(L(), month, "tudo");
+      expect(r.summary.receitas).toBeGreaterThan(0);
+      await onboardUserWithoutStorage();
+    } finally {
+      if (prev.driver === undefined) delete process.env.STORAGE_DRIVER; else process.env.STORAGE_DRIVER = prev.driver;
+      if (prev.key !== undefined) process.env.SUPABASE_SERVICE_ROLE_KEY = prev.key;
+      if (prev.url === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL; else process.env.NEXT_PUBLIC_SUPABASE_URL = prev.url;
+    }
+  });
+});
+
+/** Onboarding de mais um usuário local sem família, sem depender do Storage. */
+async function onboardUserWithoutStorage() {
+  const id = "99999999-9999-4999-8999-999999999999";
+  await withService((db) => db.query("select 1")); // conexão do app ok
+  const { default: pg } = await import("pg");
+  const admin = new pg.Client({ connectionString: (await import("../support/db")).testUrl });
+  await admin.connect();
+  await admin.query("insert into auth.users (id, email) values ($1, 'semchave@exemplo.local') on conflict do nothing", [id]);
+  await admin.end();
+  const hh = await createMyHousehold(id, { name: "Família Sem Chave", displayName: "Sem Chave" });
+  expect((await loadMembership(id))?.householdId).toBe(hh);
+}

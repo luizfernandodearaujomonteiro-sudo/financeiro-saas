@@ -23,9 +23,25 @@ function localFile(p: string) {
   return path.resolve(env.localStorageDir, BUCKET, safePath(p));
 }
 
+export const STORAGE_UNAVAILABLE_MESSAGE =
+  "Upload de PDF indisponível no momento: o armazenamento de arquivos (Supabase Storage) ainda não foi configurado. Login, painel e lançamentos funcionam normalmente.";
+
+/** Armazenamento indisponível (ex.: produção sem SUPABASE_SERVICE_ROLE_KEY). */
+export class StorageUnavailableError extends Error {
+  constructor() {
+    super(STORAGE_UNAVAILABLE_MESSAGE);
+    this.name = "StorageUnavailableError";
+  }
+}
+
+/** Local: sempre. Supabase: só com URL + service key (opcional — sem ela, apenas o upload de PDF fica desligado). */
+export function storageAvailable(): boolean {
+  return env.storageDriver === "local" || Boolean(env.supabaseUrl() && env.supabaseServiceRoleKey());
+}
+
 function serviceClient() {
   const url = env.supabaseUrl(), key = env.supabaseServiceRoleKey();
-  if (!url || !key) throw new Error("SUPABASE_SERVICE_ROLE_KEY necessário para o armazenamento em produção");
+  if (!url || !key) throw new StorageUnavailableError();
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
@@ -45,7 +61,8 @@ export async function putObject(p: string, bytes: Uint8Array, contentType: strin
 /** Lê o arquivo. Chame SOMENTE depois de confirmar via RLS que o usuário pode ver o documento. */
 export async function getObject(p: string): Promise<Uint8Array> {
   if (env.storageDriver === "local") return new Uint8Array(await fs.readFile(localFile(p)));
-  const { data, error } = await serviceClient().storage.from(BUCKET).download(safePath(p));
+  const sb = serviceClient();
+  const { data, error } = await sb.storage.from(BUCKET).download(safePath(p));
   if (error || !data) throw new Error("arquivo indisponível");
   return new Uint8Array(await data.arrayBuffer());
 }

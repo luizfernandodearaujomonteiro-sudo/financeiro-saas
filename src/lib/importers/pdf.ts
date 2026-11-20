@@ -4,7 +4,7 @@ import { todayISO } from "../domain/dates";
 import { sha256Hex } from "../security/crypto";
 import { ingestStatement } from "../services/review";
 import type { MemberCtx } from "../services/types";
-import { putObject } from "../storage";
+import { putObject, StorageUnavailableError, storageAvailable } from "../storage";
 
 export const MAX_PDF_BYTES = 8 * 1024 * 1024;
 
@@ -60,6 +60,7 @@ export async function ingestDocument(
 
   let documentId = existing?.id ?? null;
   if (!documentId) {
+    if (!storageAvailable()) throw new StorageUnavailableError(); // documento novo precisa ser guardado
     const ext = isPdf ? "pdf" : "txt";
     const storagePath = `${ctx.householdId}/${ctx.userId}/${sha}.${ext}`;
     await putObject(storagePath, input.bytes, isPdf ? "application/pdf" : "text/plain");

@@ -1,6 +1,7 @@
 "use server";
 import { requireCtx } from "@/lib/auth/member";
 import { formObject, run, type ActionState } from "@/lib/actions";
+import { StorageUnavailableError, storageAvailable } from "@/lib/storage";
 import { ingestDocument, MAX_PDF_BYTES, PDF_PASSWORD_NEEDED, PDF_PASSWORD_WRONG } from "@/lib/importers/pdf";
 import { approveReview, rejectReview } from "@/lib/services/review";
 
@@ -31,6 +32,7 @@ export async function rejectAction(_p: ActionState, fd: FormData): Promise<Actio
 export async function uploadAction(_p: ActionState, fd: FormData): Promise<ActionState> {
   const c = await ctx();
   return run(async () => {
+    if (!storageAvailable()) throw new StorageUnavailableError();
     const file = fd.get("file");
     if (!(file instanceof File) || file.size === 0) throw new Error("Escolha um arquivo PDF");
     if (file.size > MAX_PDF_BYTES) throw new Error("PDF maior que 8 MB");

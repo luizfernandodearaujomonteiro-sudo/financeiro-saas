@@ -33,14 +33,24 @@ export function setDatabaseUrlResolver(fn: () => string) {
   urlResolver = fn;
 }
 
+/**
+ * Consulta SEM nome de prepared statement. O pooler do Supabase (Supavisor) em modo
+ * transaction (porta 6543) não suporta prepared statements NOMEADOS; com `name`
+ * ausente o node-postgres usa o statement sem nome do protocolo estendido, que vale
+ * só dentro da própria mensagem e funciona no modo transaction.
+ */
+export function toQueryConfig(sql: string, params: unknown[] = []): pg.QueryConfig {
+  return { text: sql, values: params };
+}
+
 function wrap(client: pg.PoolClient): Db {
   return {
     async query<T>(sql: string, params: unknown[] = []) {
-      const r = await client.query(sql, params);
+      const r = await client.query(toQueryConfig(sql, params));
       return r.rows as T[];
     },
     async one<T>(sql: string, params: unknown[] = []) {
-      const r = await client.query(sql, params);
+      const r = await client.query(toQueryConfig(sql, params));
       return (r.rows[0] as T) ?? null;
     },
   };
