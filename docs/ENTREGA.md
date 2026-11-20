@@ -10,6 +10,8 @@ Branch: `rewrite/familia-nextjs` (nada foi enviado ao remoto; `main` não foi al
 
 ## Sumário
 
+0. [Revisão 1 — o que mudou](#0-revisão-1--o-que-mudou)
+
 1. [O que foi feito](#1-o-que-foi-feito)
 2. [Como rodar localmente](#2-como-rodar-localmente)
 3. [Como usar](#3-como-usar)
@@ -24,6 +26,44 @@ Branch: `rewrite/familia-nextjs` (nada foi enviado ao remoto; `main` não foi al
 12. [Capturas de tela](#12-capturas-de-tela)
 
 ---
+
+## 0. Revisão 1 — o que mudou
+
+Correções da revisão minuciosa (rodada 1). Cada item tem teste automatizado.
+
+| # | Achado | Correção |
+|---|---|---|
+| 1 | App conectava como `postgres` (dono do projeto compartilhado); `withService()` não trocava de papel | Novo papel de login **`fam_app` NOINHERIT** (sem `SET ROLE` não tem privilégio nenhum) com membership em `anon`/`authenticated`/`service_role`; `withService()` faz `SET LOCAL ROLE service_role` (só DML). SQL manual em `supabase/manual/fam_app_role.sql`; `DATABASE_URL` de produção usa `fam_app.<project-ref>` no pooler; scripts administrativos usam `DATABASE_URL_ADMIN` (nunca na Vercel). Local espelha: app, RLS e e2e conectam como `fam_app`. Teste: sem `SET ROLE` → *permission denied*; nem `fam_app` nem `service_role` fazem DDL. |
+| 2 | RPCs de login expostas no PostgREST para a anon key | `fam_login_failures`, `fam_record_login_attempt` **e** `fam_invite_info` foram para o schema **`fam_private`** (não exposto pela Data API); EXECUTE só para os papéis do app. |
+| 3a | Pagar fatura importada criava despesa duplicada | `payBill()` de conta com `card_id` não cria lançamento: marca a conta e a `fam_invoices` correspondente como pagas. |
+| 3b | Pagamento de fatura e transferências próprias contavam como receita/despesa | Coluna `exclude_from_reports` (+ `exclude_reason`) em `fam_entries`, classificador (categoria Pluggy/descrição), respeitada em painel, relatórios, série, comparativo, resumo do WhatsApp e resumo semanal. Selo na lista de lançamentos e opção de alternar. |
+| 3c | Estornos no cartão inflavam receitas | Estorno (receita no cartão) agora **reduz a despesa** em todos os relatórios; continua abatendo o total da fatura. |
+| 4 | Parcelas do Pluggy caíam todas na mesma fatura | Usa `creditCardMetadata.billId` (vencimento do bill); sem ele, desloca *(n−1)* faturas a partir da compra original. Mock com duas compras parceladas. |
+| 5 | Evolution v2.3.x com remetente `@lid` era ignorado | Fallback para `key.remoteJidAlt` / `key.senderPn` / `data.senderPn`; sem número → ignora com "lid sem número". Payload de outra `instance` é ignorado; mensagens de protocolo/reação também. |
+| 6 | Alerta perdido quando o envio falhava | Se todas as mensagens para um destinatário falharem, a reserva em `fam_notification_log` é removida e o próximo cron tenta de novo (sem duplicar quando dá certo). Provedor não configurado conta como falha. |
+| 7 | Sem opção de desligar lembrete/resumo | `daily_reminder` e `weekly_summary` por perfil (Configurações › Alertas › Minhas mensagens); jobs respeitam. |
+| 8 | PDF de fatura com senha | Detecção ("PDF protegido por senha" / "Senha do PDF incorreta") visível na Revisão com instruções; upload aceita senha **só em memória**; senha opcional por perfil **cifrada** (`fam_pdf_passwords`, RPC SECURITY DEFINER, sem acesso de anon/authenticated) usada pelo sync do Gmail; documento com erro é reprocessado quando reenviado. |
+| 9 | Mudar ciclo do cartão não atualizava faturas futuras | `updateCard()` recalcula fechamento/vencimento das faturas **abertas do mês corrente em diante** (RPC `fam_set_invoice_dates`, só cartão próprio); passadas/pagas não mudam; lançamentos continuam na mesma fatura. Formulário "Editar cartão". |
+| 10 | Tema herdado entre pessoas no mesmo navegador | No login (e no aceite de convite) o cookie de tema é gravado a partir das preferências do perfil. |
+| 11 | Menores | Verify token da Meta comparado em tempo constante; webhook Pluggy por header `x-webhook-secret` (segredo fora da query string por padrão); Vitest com `import.meta.dirname`. |
+
+Migrations: as `fam_` existentes foram editadas (ainda não aplicadas em lugar nenhum) e há uma nova,
+`20261120000700_fam_pdf_password_invoice_dates.sql`. Continua tudo aditivo e só com objetos `fam_`
+(mais o schema novo `fam_private`).
+
+### Limitações conhecidas (após a revisão 1)
+- **`service_role` no Supabase alcança as outras tabelas do projeto** (tem `BYPASSRLS` e os
+  privilégios padrão do Supabase). O app só assume esse papel em crons, webhooks e no log de
+  mensagens enviadas; requisições do painel usam `authenticated` (RLS). Ele não é dono das tabelas,
+  então não consegue `ALTER`/`DROP` tabelas de outros apps — mas consegue ler/alterar dados delas.
+- O classificador de pagamento de fatura/transferência é heurístico (categoria da Pluggy +
+  descrição). Erros podem ser corrigidos pelo usuário com o botão de alternar na lista.
+- Parcelas sem `billId` usam a regra *(n−1)* meses — bancos que reportam a data da parcela (e não
+  a da compra) podem deslocar uma fatura a mais; o lançamento pode ser editado.
+- Mudança de ciclo não move lançamentos entre faturas (só datas de fechamento/vencimento).
+- Reenvio de alerta só quando **todas** as mensagens do destinatário falham; se o texto foi e só o
+  código falhou, não há reenvio automático (o código está na tela Contas a pagar).
+- O cookie de tema não é httpOnly (é cosmético e lido pelo navegador).
 
 ## 1. O que foi feito
 
@@ -140,10 +180,15 @@ Outros comandos: `npm run db:local:stop` (para o Postgres local), `db:local:rese
   parcelas — a prévia mostra em qual fatura cai cada parcela. Edite, compartilhe/torne pessoal
   ou exclua (compra parcelada: exclui todas as parcelas).
 - **Cartões**: cadastre cartões (pessoais ou da casa), veja a fatura atual e o histórico de
-  faturas com os itens; marque como paga.
+  faturas com os itens; marque como paga. Em **Editar cartão** dá para mudar o ciclo — as faturas
+  em aberto deste mês em diante ganham as novas datas.
 - **Contas a pagar**: cadastre com linha digitável/código de barras e/ou Pix (validação ao
   digitar), copie o código, veja a **prévia do alerta do WhatsApp**, marque como paga
-  (gera o lançamento).
+  (gera o lançamento; se for **fatura de cartão importada**, só marca a fatura como paga, sem
+  despesa nova).
+- **Lançamentos fora dos relatórios**: pagamentos de fatura e transferências entre contas próprias
+  aparecem com selo e riscados; use "Contar nos relatórios" / "Marcar como pagamento de fatura /
+  transferência" para corrigir. Estornos no cartão aparecem como "reduz despesa".
 - **Revisão**: itens vindos das faturas (Gmail ou upload de PDF) aguardam sua aprovação;
   edite descrição/valor/data/categoria/cartão/visibilidade antes de aprovar, ou rejeite.
 - **Open Finance**: cada pessoa conecta **as próprias** contas. Tudo entra como **pessoal**;
@@ -184,9 +229,9 @@ Números desconhecidos não recebem resposta nem dados.
 ```bash
 npm run typecheck
 npm run lint
-npm test             # 46 testes unitários
-npm run test:rls     # 51 testes de RLS no Postgres local real (porta 54330, recriado do zero)
-npm run test:e2e     # 22 testes ponta a ponta locais
+npm test             # 68 testes unitários
+npm run test:rls     # 56 testes de RLS no Postgres local real (porta 54330, recriado do zero; conecta como fam_app)
+npm run test:e2e     # 31 testes ponta a ponta locais (conecta como fam_app)
 npm run build
 npm run screenshots  # fumaça no navegador + capturas (requer build e `npx playwright install chromium`)
 ```
@@ -263,6 +308,14 @@ A resposta do assistente aparece no Simulador (provedor `simulator`).
   (`@g.us`), deduplica por `key.id`, extrai o telefone do `remoteJid` (normalizando o 9º dígito
   de celulares BR), mapeia para o perfil em `fam_whatsapp_numbers`; número desconhecido = silêncio.
 - Envio em ordem (uma chamada por mensagem) e registro em `fam_whatsapp_messages`.
+- **Evolution v2.3.x / LID**: se o `remoteJid` vier como `<id>@lid`, o número é lido de
+  `key.remoteJidAlt`, `key.senderPn` ou `data.senderPn`; sem número, a mensagem é ignorada
+  ("lid sem número"). Payloads com `instance` diferente da configurada (ambiente + Configurações)
+  e mensagens de protocolo/reação são ignorados.
+- **Falha de envio**: se todas as mensagens de um alerta/lembrete para uma pessoa falharem, ele
+  volta para a fila do próximo cron (sem duplicar quando dá certo).
+- **Preferências**: cada pessoa pode desligar o lembrete diário e o resumo semanal em
+  Configurações › Alertas › Minhas mensagens (alertas de vencimento continuam ativos).
 - Credenciais **somente no servidor**: variáveis de ambiente, arquivo (`EVOLUTION_INSTANCE_TOKEN_FILE`)
   ou banco **cifrado** (AES-256-GCM, via RPC exclusiva do dono). A tela de Configurações mostra
   apenas a **origem** ("via env", "via arquivo", "armazenado cifrado"), nunca o valor.
@@ -351,9 +404,17 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 - **Sandbox** (`PLUGGY_MODE=sandbox` + `PLUGGY_CLIENT_ID/SECRET` de um app sandbox da Pluggy):
   o widget mostra os conectores de teste — use **Pluggy Bank** com usuário `user-ok` e senha
   `password-ok`. Confira a URL/versão atual do script do widget (`PLUGGY_CONNECT_SCRIPT_URL`).
-- **Produção** (`PLUGGY_MODE=live`): no painel da Pluggy configure o webhook
-  `https://<deploy>/api/pluggy/webhook?secret=<PLUGGY_WEBHOOK_SECRET>` (o connect token também
-  informa essa URL quando `APP_URL` é https). Sincronização diária extra via cron `pluggy-sync`.
+- **Produção** (`PLUGGY_MODE=live`): cadastre o webhook **uma vez** pela API de webhooks da Pluggy,
+  com URL `https://<deploy>/api/pluggy/webhook` e o header `x-webhook-secret: <PLUGGY_WEBHOOK_SECRET>`
+  (eventos `item/created`, `item/updated`, `transactions/created`, `transactions/updated`, `item/deleted`).
+  Evite `?secret=` na URL: query strings aparecem em logs de acesso. O connect token só inclui a URL
+  com o segredo se `PLUGGY_WEBHOOK_SECRET_IN_URL=true` for definido explicitamente.
+  Sincronização diária extra via cron `pluggy-sync`.
+- **Pagamentos e transferências**: pagamento de fatura (débito na conta e crédito no cartão) e
+  transferências entre contas da mesma pessoa entram com o selo "fora dos relatórios"; estornos no
+  cartão reduzem a despesa. **Parcelas**: `billId` → fatura do banco; sem ele, *(n−1)* faturas.
+- **Pagar fatura importada** (Contas a pagar): não cria despesa nova — marca a fatura do cartão
+  como paga (as compras já estão lançadas).
 
 ---
 
@@ -367,7 +428,10 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
    O refresh token é cifrado e salvo por RPC do próprio usuário.
 4. O cron `gmail-sync` busca e-mails com PDF de fatura dos últimos 45 dias, deduplica por sha256,
    guarda no bucket privado `fam_faturas` e coloca os itens na **Revisão** do dono.
-5. Modo local: `GMAIL_MODE=mock` gera uma fatura de exemplo.
+5. **PDF com senha**: cadastre a senha dos PDFs em Configurações › Gmail (guardada cifrada,
+   nunca exibida) para o sync ler faturas protegidas; sem ela, o documento aparece na Revisão como
+   "PDF protegido por senha" e pode ser reenviado manualmente com a senha (usada só em memória).
+6. Modo local: `GMAIL_MODE=mock` gera uma fatura de exemplo.
 
 ---
 
@@ -378,7 +442,7 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 > de aplicar. Faça um backup/snapshot antes. Nada foi aplicado nele durante este trabalho.
 
 ### 1. Revisar as migrations
-`supabase/migrations/` (6 arquivos, nesta ordem):
+`supabase/migrations/` (7 arquivos, nesta ordem):
 
 | Arquivo | Conteúdo |
 |---|---|
@@ -388,8 +452,10 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 | `20261119000400_fam_invest_bridge.sql` | funções de leitura das tabelas `invest_*` (não altera `invest_*`) |
 | `20261119000500_fam_bills_goals_prefs.sql` | contas a pagar (boleto/Pix), metas, busca, patrimônio, preferências |
 | `20261119000600_fam_whatsapp_log_pluggy_sync.sql` | log do WhatsApp e grants de sincronização |
+| `20261120000700_fam_pdf_password_invoice_dates.sql` | senha de PDF cifrada por perfil e recálculo de faturas abertas |
 
-Garantias: somente `create ... fam_*` (tabelas, índices, funções, triggers, políticas);
+Garantias: somente `create ... fam_*` (tabelas, índices, funções, triggers, políticas) e o
+schema novo `fam_private` (RPCs de login/convite, não exposto pela Data API);
 **nenhum** `drop`/`alter`/`insert`/`update` em tabelas existentes; **nenhum** trigger em
 `auth.users`; não reutiliza nomes `fin_joao_*`; não cria `invest_*`. (Um teste automático
 confere que as migrations não criam objetos fora do prefixo `fam_`.)
@@ -413,7 +479,22 @@ supabase db push
 Se o `db push` reclamar de migrations remotas desconhecidas, **não** use `migration repair`
 às cegas — prefira o SQL Editor.
 
-Alternativa — psql: `psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -1 -f <arquivo>` para cada arquivo.
+Alternativa — psql: `psql "$DATABASE_URL_ADMIN" -v ON_ERROR_STOP=1 -1 -f <arquivo>` para cada arquivo.
+
+Confira que o schema `fam_private` **não** está na lista de schemas expostos
+(Settings › API › Exposed schemas — o padrão é só `public` e `graphql_public`).
+
+### 2b. Papel de conexão do app (`fam_app`)
+1. Abra `supabase/manual/fam_app_role.sql`, troque `<SENHA-FORTE>` por uma senha aleatória
+   (`openssl rand -base64 32`) **sem salvar o arquivo com a senha** e execute no SQL Editor.
+2. As consultas de conferência no fim do arquivo devem retornar `f, t, t, t`.
+3. Confira também: `select has_schema_privilege('service_role', 'public', 'CREATE');` — se vier
+   `t`, saiba que o Supabase permite `CREATE` no schema public ao `service_role`; o app nunca faz
+   DDL, mas isso faz parte da limitação conhecida do `service_role` (§0).
+4. `DATABASE_URL` (Vercel) = `postgres://fam_app.<project-ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:6543/postgres`.
+5. Se o `grant anon, authenticated, service_role to fam_app` for recusado pelo Supabase, **não**
+   use o papel `postgres` no app: abra um chamado/consulte a documentação de papéis customizados
+   do Supabase antes do go-live.
 
 ### 3. Storage
 Crie manualmente o bucket **privado** `fam_faturas` (Storage › New bucket, sem acesso público).
@@ -426,17 +507,18 @@ são lidos pelo servidor depois de a RLS confirmar que o documento é do usuári
   Add user (senha forte, ≥ 12 caracteres).
 - Crie a família (escreve somente em tabelas `fam_`):
   ```bash
-  DATABASE_URL="postgres://..." npm run bootstrap -- --owner-email luiz@... --owner-name Luiz \
+  DATABASE_URL_ADMIN="postgres://..." npm run bootstrap -- --owner-email luiz@... --owner-name Luiz \
     --household "Família do Luiz" --member-email esposa@... --member-name "<nome>"        # dry-run
-  DATABASE_URL="postgres://..." npm run bootstrap -- ... --yes                            # aplica
+  DATABASE_URL_ADMIN="postgres://..." npm run bootstrap -- ... --yes                      # aplica
   ```
   Alternativa para a esposa: Configurações › Família › **Gerar link de convite** (o dono) e ela
   abre `/convite/<token>` logada com a conta dela.
 
 ### 5. Vercel
 1. Importe o repositório (framework Next.js; região `gru1` em `vercel.json`).
-2. Variáveis (todas documentadas em `.env.example`): `APP_URL`, `DATABASE_URL` (pooler em modo
-   transaction, porta 6543), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+2. Variáveis (todas documentadas em `.env.example`): `APP_URL`, `DATABASE_URL` (**papel `fam_app`**,
+   pooler em modo transaction, porta 6543 — nunca o `postgres`; `DATABASE_URL_ADMIN` **não** vai
+   para a Vercel), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
    `SUPABASE_SERVICE_ROLE_KEY`, `LOGIN_RATE_LIMIT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CRON_SECRET`,
    `OAUTH_STATE_SECRET`, `STORAGE_DRIVER=supabase`, Gmail, Pluggy, WhatsApp.
    **Nunca** defina `LOCAL_DEV_AUTH` na Vercel (o app recusa).
@@ -449,7 +531,7 @@ são lidos pelo servidor depois de a RLS confirmar que o documento é do usuári
 (origem `importacao`, `external_id = bills:<id>`, idempotente). Nunca roda sozinho; sem `--apply`
 é só simulação:
 ```bash
-DATABASE_URL=... npm run import:bills -- --source-user <uuid do dono das bills> --member <uuid do membro> [--visibility pessoal] --apply
+DATABASE_URL_ADMIN=... npm run import:bills -- --source-user <uuid do dono das bills> --member <uuid do membro> [--visibility pessoal] --apply
 ```
 
 ---
@@ -466,14 +548,25 @@ DATABASE_URL=... npm run import:bills -- --source-user <uuid do dono das bills> 
   membros) ou `fam_bootstrap_household` (somente service role).
 - **anon** sem privilégio em nenhuma tabela; só pode chamar as RPCs de limite de login e de
   informação do convite.
-- **Privilégio de serviço** (conexão sem troca de papel) usado somente em:
+- **Conexão do app**: papel `fam_app` **NOINHERIT** — sem `SET ROLE` não tem privilégio. Por
+  transação o app assume `authenticated` + claim `sub` (painel, RLS), `anon` (login/convite, só
+  RPCs de `fam_private`) ou `service_role` (só DML). Migrations e scripts administrativos usam outra
+  credencial (`DATABASE_URL_ADMIN` / SQL Editor), nunca a do app.
+- **RPCs para anon fora da API**: `fam_login_failures`, `fam_record_login_attempt` e
+  `fam_invite_info` ficam em `fam_private`, que o PostgREST não expõe. `fam_invite_info` poderia
+  ficar no `public` (só lê com um token de 64 hex, inviável por força bruta), mas foi movida também
+  para reduzir a superfície exposta.
+- **`service_role`** (via `withService()`) usado somente em:
   1. crons (`/api/cron/*`);
-  2. webhooks: deduplicação e identificação do remetente (WhatsApp), localização do item (Pluggy) —
-     o processamento em si roda **como o membro** (RLS);
+  2. webhooks: deduplicação, identificação do remetente e filtro de instância (WhatsApp),
+     localização do item (Pluggy) — o processamento em si roda **como o membro** (RLS);
   3. registro das mensagens enviadas no `fam_whatsapp_messages` (inclui o botão "Testar" do dono);
-  4. Storage em produção (upload/leitura de PDF), sempre depois de a RLS autorizar o documento;
-  5. somente local: verificador de senha do modo `LOCAL_DEV_AUTH` (shim `auth.users`), botões de
+  4. leitura da senha de PDF cifrada pelo job do Gmail;
+  5. Storage em produção (upload/leitura de PDF, com a service key), sempre depois de a RLS
+     autorizar o documento;
+  6. somente local: verificador de senha do modo `LOCAL_DEV_AUTH` (shim `auth.users`), botões de
      jobs do simulador e "Sincronizar agora (mock)" do Gmail.
+  **Limitação**: no Supabase o `service_role` também alcança tabelas de outros apps (ver §0).
 - **Sessão**: cookies httpOnly (`@supabase/ssr`; `getUser()` valida o JWT no Auth a cada requisição).
 - **Login**: bloqueio após 5 falhas por e-mail ou 20 por IP em 15 min (chaves HMAC), mensagens
   genéricas, senha mínima de 12 caracteres (letras e números) nos fluxos do app.
@@ -507,8 +600,9 @@ tabelas pela API REST do Supabase**, sem login. Isso pode incluir dados financei
   de taxa, cadastro aberto) afetam todos os apps. O app exige família para qualquer acesso, mas
   ajuste os limites de taxa do Supabase Auth — eles também protegem chamadas feitas diretamente
   à API de Auth (o limite do app cobre o login pelo painel).
-- **Conexão direta ao Postgres** (`DATABASE_URL`): é um segredo de alto privilégio; guarde só na
-  Vercel. As requisições do painel trocam para o papel `authenticated` em cada transação.
+- **Conexão direta ao Postgres** (`DATABASE_URL` com `fam_app`): guarde só na Vercel. Mesmo
+  vazada, sem `SET ROLE` ela não lê nada — mas permite assumir `service_role`; trate como segredo
+  de alto valor. `DATABASE_URL_ADMIN` (postgres) só na máquina de quem administra, nunca na Vercel.
 - **Faturas de cartão via Open Finance**: a maioria dos bancos **não expõe** linha digitável/Pix da
   fatura; nesses casos o alerta avisa que o código está indisponível.
 - **Evolution/Baileys** é uma API não oficial do WhatsApp: risco de bloqueio do número; use
@@ -519,8 +613,9 @@ tabelas pela API REST do Supabase**, sem login. Isso pode incluir dados financei
 
 ## 11. Pendências / TODO
 
-- **PDF com senha**: muitos bancos protegem a fatura com senha (CPF). Hoje o item fica com
-  `parse_error`. TODO: senha por conexão Gmail (cifrada) e desbloqueio antes da extração.
+- **PDF com senha**: resolvido na revisão 1 (detecção, senha em memória no upload e senha cifrada
+  por perfil para o Gmail). Formatos de criptografia exóticos que o pdf.js não abra continuam com
+  `parse_error`.
 - **Parser de fatura**: heurística genérica para o layout mais comum; layouts específicos de
   cada banco podem precisar de ajustes (os itens sempre passam pela Revisão).
 - **Meta Cloud API**: mensagens de template para alertas/lembretes fora da janela de 24 h.
@@ -545,6 +640,7 @@ Geradas localmente com `npm run screenshots` (Playwright, banco local com seed):
 | Contas a pagar (boleto/Pix) | ![contas](screenshots/04-contas-a-pagar.png) |
 | Revisão | ![revisão](screenshots/05-revisao.png) |
 | Open Finance (mock) | ![open finance](screenshots/06-open-finance.png) |
+| Lançamentos importados: pagamento de fatura / transferência fora dos relatórios | ![fora dos relatórios](screenshots/06b-lancamentos-fora-dos-relatorios.png) |
 | Metas | ![metas](screenshots/07-metas.png) |
 | Relatórios | ![relatórios](screenshots/08-relatorios.png) |
 | Patrimônio | ![patrimônio](screenshots/09-patrimonio.png) |

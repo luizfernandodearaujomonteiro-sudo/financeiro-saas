@@ -81,6 +81,15 @@ async function main() {
     await p.getByRole("button", { name: "Conectar banco simulado" }).click();
     await expectText(p, "Cartão Simulado Visa");
     await shot(p, "06-open-finance", "/open-finance", "Cartão Simulado Visa");
+    // lançamentos importados: pagamento de fatura / transferência com selo "fora dos relatórios"
+    await p.goto(`${BASE}/lancamentos?visao=minha`);
+    const badge = p.getByText("fora dos relatórios").first();
+    await badge.waitFor({ timeout: 15_000 });
+    await badge.scrollIntoViewIfNeeded();
+    await p.mouse.wheel(0, -160);
+    await p.waitForTimeout(900);
+    await p.screenshot({ path: `${OUT}/06b-lancamentos-fora-dos-relatorios.png` });
+    console.log("  ✓ 06b-lancamentos-fora-dos-relatorios.png");
     await shot(p, "07-metas", "/metas", "Reserva de emergência");
     await shot(p, "08-relatorios", "/relatorios", "equilíbrio");
     await shot(p, "09-patrimonio", "/patrimonio", "Patrimônio");
