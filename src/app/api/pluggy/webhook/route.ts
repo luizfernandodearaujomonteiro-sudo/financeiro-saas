@@ -1,6 +1,8 @@
 /**
- * Webhook da Pluggy. Autenticação por segredo compartilhado (header x-webhook-secret
- * ou ?secret=), comparado em tempo constante; falha fechada se não configurado.
+ * Webhook da Pluggy. Autenticação por segredo compartilhado, comparado em tempo constante;
+ * falha fechada se não configurado. Preferência: header `x-webhook-secret` (cadastrado
+ * via API de webhooks da Pluggy). `?secret=` é aceito por compatibilidade, mas aparece
+ * em logs de acesso — evite.
  * O payload só fornece o itemId; os dados são buscados na API e importados como o dono do item.
  */
 import { env } from "@/lib/env";
