@@ -40,6 +40,39 @@ describe("classificador de pagamento de fatura / transferência", () => {
     expect(card("PAGAMENTO RECEBIDO", "DEBIT")).toBeNull(); // débito no cartão é compra
     expect(card("NETFLIX.COM", "DEBIT")).toBeNull();
   });
+  it("aplicação/resgate só é transferência com o produto ou categoria de investimento", () => {
+    expect(bank("RESGATE PREMIO", "CREDIT")).toBeNull();
+    expect(bank("APLICACAO MULTA")).toBeNull();
+    expect(bank("RESGATE DE PONTOS LIVELO", "CREDIT")).toBeNull();
+    expect(bank("APLICACAO CDB")).toBe("transferencia");
+    expect(bank("RESGATE POUPANCA", "CREDIT")).toBe("transferencia");
+    expect(bank("APLIC AUT CDB DI")).toBe("transferencia");
+    expect(bank("RESGATE TESOURO DIRETO", "CREDIT")).toBe("transferencia");
+    expect(bank("APLICACAO AUTOMATICA")).toBe("transferencia");
+    expect(bank("RESGATE LCI 2027", "CREDIT")).toBe("transferencia");
+    // sem produto, mas a categoria da Pluggy é de investimento
+    expect(bank("RESGATE", "CREDIT", "Investments")).toBe("transferencia");
+    expect(bank("APLICACAO", "DEBIT", "Fixed income")).toBe("transferencia");
+    // categoria de investimento sem a palavra aplicação/resgate não basta
+    expect(bank("RENDIMENTO POUPANCA", "CREDIT", "Savings")).toBeNull();
+  });
+  it("prefixo de adquirente (PAG*, PG *, MP*) nunca é pagamento de fatura", () => {
+    expect(card("PAG*JoseDaSilva")).toBeNull(); // estorno no cartão de compra via subadquirente
+    expect(card("PAG*CARTAO DE TODOS")).toBeNull();
+    expect(card("PG *LOJA FATURA FACIL")).toBeNull();
+    expect(bank("PAG*JoseDaSilva")).toBeNull();
+    expect(bank("PAG*CARTAO DE TODOS")).toBeNull(); // compra no débito, não pagamento de cartão
+    expect(bank("PAG*FATURA LOJA", "DEBIT", "Credit card payment")).toBeNull();
+    expect(card("MP*VENDEDOR")).toBeNull();
+    // sem prefixo de adquirente continua funcionando
+    expect(card("PAGAMENTO RECEBIDO")).toBe("pagamento_fatura");
+    expect(bank("PAG FATURA CARTAO")).toBe("pagamento_fatura");
+  });
+  it("no cartão, 'pagamento' sozinho no início só conta como pagamento da fatura quando é o texto inteiro", () => {
+    expect(card("PAGAMENTO")).toBe("pagamento_fatura");
+    expect(card("PAG JOSE DA SILVA")).toBeNull();
+    expect(card("PAGTO LOJA XYZ")).toBeNull();
+  });
   it("estorno no cartão é detectado pela forma de pagamento ou pelo cartão", () => {
     expect(isCardRefund({ kind: "receita", payment_method: "cartao_credito" })).toBe(true);
     expect(isCardRefund({ kind: "receita", payment_method: "pix", card_id: "c1" })).toBe(true);
