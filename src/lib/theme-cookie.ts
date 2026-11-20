@@ -17,3 +17,8 @@ export function themeFromCookie(v: string | undefined, now = new Date()): Resolv
   const t = decodeTheme(v);
   return resolveTheme(t.mode, { now, start: t.start, end: t.end });
 }
+
+/** Valor do cookie a partir das preferências salvas no perfil (padrão: escuro). */
+export function themeCookieFromPrefs(p: { theme_mode: ThemeMode; auto_dark_start: number; auto_dark_end: number } | null | undefined): string {
+  return p ? encodeTheme(p.theme_mode, p.auto_dark_start, p.auto_dark_end) : "dark";
+}

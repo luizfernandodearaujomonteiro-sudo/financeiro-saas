@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSessionUser, signIn } from "@/lib/auth/session";
 import { acceptInvite } from "@/lib/services/household";
 import { errorMessage, type ActionState } from "@/lib/actions";
+import { syncThemeCookie } from "@/lib/theme-sync";
 
 /**
  * Aceite de convite: a pessoa ENTRA com uma conta existente (o auth.users é
@@ -21,6 +22,7 @@ export async function acceptInviteAction(_p: ActionState, fd: FormData): Promise
       user = { id: r.userId, email: r.email };
     }
     await acceptInvite(user.id, token, name.data);
+    await syncThemeCookie(user.id);
   } catch (e) {
     return { ok: false, error: errorMessage(e) };
   }

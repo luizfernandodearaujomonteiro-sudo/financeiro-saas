@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { signIn, signOut } from "@/lib/auth/session";
 import type { ActionState } from "@/lib/actions";
+import { syncThemeCookie } from "@/lib/theme-sync";
 
 const loginSchema = z.object({ email: z.string().trim().email("E-mail inválido").max(200), password: z.string().min(1, "Informe a senha").max(200) });
 
@@ -19,6 +20,8 @@ export async function loginAction(_prev: ActionState, fd: FormData): Promise<Act
   if (!r.ok) {
     return { ok: false, error: r.error === "bloqueado" ? "Muitas tentativas. Aguarde 15 minutos e tente novamente." : "E-mail ou senha incorretos." };
   }
+  // o tema é por perfil: quem entra no mesmo navegador não herda o tema de quem saiu
+  await syncThemeCookie(r.userId);
   const next = String(fd.get("next") ?? "");
   redirect(next.startsWith("/") && !next.startsWith("//") ? next : "/painel");
 }

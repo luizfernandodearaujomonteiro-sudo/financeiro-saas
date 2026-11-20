@@ -44,7 +44,7 @@ export async function seed(url: string, opts: { quiet?: boolean; today?: string 
     await q("insert into public.fam_household_settings (household_id, whatsapp_undo_minutes, bill_alert_days) values ($1, 10, 3)", [hh]);
     await q("insert into public.fam_whatsapp_config (household_id, provider, display_number, evolution_base_url, evolution_instance, updated_by) values ($1, 'simulator', '+55 11 99000-0000', 'https://centralw.ftcplay.com', 'financeiro', $2)", [hh, luiz.id]);
     await q("insert into public.fam_whatsapp_numbers (user_id, household_id, phone_e164) values ($1,$2,$3), ($4,$2,$5)", [luiz.id, hh, luiz.phone, esposa.id, esposa.phone]);
-    await q("insert into public.fam_profile_prefs (user_id, theme_mode) values ($1, 'dark'), ($2, 'auto')", [luiz.id, esposa.id]);
+    await q("insert into public.fam_profile_prefs (user_id, theme_mode) values ($1, 'dark'), ($2, 'light')", [luiz.id, esposa.id]);
 
     const cat = new Map<string, string>((await q("select id, name from public.fam_categories where household_id = $1", [hh])).rows.map((r) => [r.name, r.id]));
     const C = (n: string) => cat.get(n) ?? null;

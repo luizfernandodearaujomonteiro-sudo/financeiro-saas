@@ -176,3 +176,13 @@ describe("patrimônio e telefones", () => {
     expect(jidToPhone("120363000000000000@g.us")).toBeNull();
   });
 });
+
+describe("cookie de tema por perfil", () => {
+  it("é gerado a partir das preferências de quem entrou", async () => {
+    const { themeCookieFromPrefs, decodeTheme } = await import("@/lib/theme-cookie");
+    expect(themeCookieFromPrefs({ theme_mode: "light", auto_dark_start: 18, auto_dark_end: 6 })).toBe("light");
+    expect(themeCookieFromPrefs({ theme_mode: "auto", auto_dark_start: 19, auto_dark_end: 7 })).toBe("auto:19:7");
+    expect(themeCookieFromPrefs(null)).toBe("dark");
+    expect(decodeTheme(themeCookieFromPrefs({ theme_mode: "auto", auto_dark_start: 20, auto_dark_end: 5 }))).toEqual({ mode: "auto", start: 20, end: 5 });
+  });
+});

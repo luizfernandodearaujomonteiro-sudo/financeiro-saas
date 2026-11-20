@@ -110,11 +110,15 @@ async function main() {
     await p.screenshot({ path: `${OUT}/14-simulador-alertas-codigos.png`, fullPage: false });
     console.log("  ✓ 14-simulador-alertas-codigos.png");
 
-    // ---- Esposa (membro), tema claro, desktop: não vê os pessoais do Luiz ----
-    const ctxE = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-    await ctxE.addCookies([{ name: "fam_theme", value: "light", url: BASE }]);
-    const e = await ctxE.newPage();
-    await login(e, "esposa@familia.local", "Esposa@Local2026");
+    // ---- Mesmo navegador: Luiz sai, Esposa entra -> tema dela (claro), não o dele (escuro) ----
+    if ((await p.evaluate(() => document.documentElement.dataset.theme)) !== "dark") throw new Error("tema do Luiz deveria ser escuro");
+    await p.getByRole("button", { name: "Sair" }).click();
+    await p.waitForURL(`${BASE}/login`);
+    await login(p, "esposa@familia.local", "Esposa@Local2026");
+    const wifeTheme = await p.evaluate(() => document.documentElement.dataset.theme);
+    if (wifeTheme !== "light") throw new Error(`tema da esposa deveria ser claro (veio ${wifeTheme})`);
+    console.log("  ✓ tema por perfil: esposa entra no mesmo navegador e recebe o tema dela");
+    const e = p;
     await shot(e, "15-painel-claro-esposa", "/painel", "Olá, Esposa");
     await e.goto(`${BASE}/lancamentos?visao=tudo`);
     if (await e.getByText("Jogo na Steam").count()) throw new Error("VAZAMENTO: esposa viu lançamento pessoal do Luiz");
