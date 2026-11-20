@@ -16,26 +16,66 @@ function hash(s: string): number {
   return h;
 }
 
-const BANK_TX: [string, number, "DEBIT" | "CREDIT", string?][] = [
-  ["PIX RECEBIDO SALARIO EMPRESA LTDA", 6500.0, "CREDIT", "PIX"],
-  ["SUPERMERCADO EXTRA 1234", 287.45, "DEBIT"],
-  ["PIX ENVIADO CONDOMINIO RESIDENCIAL", 780.0, "DEBIT", "PIX"],
-  ["PAG BOLETO ENEL ENERGIA", 213.9, "DEBIT", "BOLETO"],
-  ["FARMACIA DROGA RAIA", 64.3, "DEBIT"],
-  ["IFOOD *RESTAURANTE", 58.9, "DEBIT"],
-  ["POSTO SHELL AV BRASIL", 180.0, "DEBIT"],
-  ["RENDIMENTO POUPANCA", 12.37, "CREDIT"],
+interface MockTx {
+  description: string;
+  amount: number;
+  type: "DEBIT" | "CREDIT";
+  daysAgo: number;
+  category?: string;
+  method?: string;
+  installment?: [number, number];
+  /** usa o billId da fatura atual do cartão (creditCardMetadata.billId) */
+  currentBill?: boolean;
+}
+
+const BANK_TX: MockTx[] = [
+  { description: "PIX RECEBIDO SALARIO EMPRESA LTDA", amount: 6500.0, type: "CREDIT", daysAgo: 1, method: "PIX", category: "Salary" },
+  { description: "SUPERMERCADO EXTRA 1234", amount: 287.45, type: "DEBIT", daysAgo: 4, category: "Groceries" },
+  { description: "PIX ENVIADO CONDOMINIO RESIDENCIAL", amount: 780.0, type: "DEBIT", daysAgo: 7, method: "PIX" },
+  { description: "PAG BOLETO ENEL ENERGIA", amount: 213.9, type: "DEBIT", daysAgo: 10, method: "BOLETO" },
+  { description: "FARMACIA DROGA RAIA", amount: 64.3, type: "DEBIT", daysAgo: 13 },
+  { description: "IFOOD *RESTAURANTE", amount: 58.9, type: "DEBIT", daysAgo: 16 },
+  { description: "POSTO SHELL AV BRASIL", amount: 180.0, type: "DEBIT", daysAgo: 19 },
+  { description: "RENDIMENTO POUPANCA", amount: 12.37, type: "CREDIT", daysAgo: 22 },
+  // NÃO são despesas: pagamento da fatura do cartão e transferência entre contas próprias
+  { description: "PAG FATURA CARTAO SIMULADO VISA", amount: 980.0, type: "DEBIT", daysAgo: 9, method: "BOLETO", category: "Credit card payment" },
+  { description: "TRANSF MESMA TITULARIDADE POUPANCA", amount: 500.0, type: "DEBIT", daysAgo: 11, category: "Same person transfer" },
 ];
 
-const CARD_TX: [string, number, number?, number?][] = [
-  ["UBER *TRIP", 23.9],
-  ["NETFLIX.COM", 55.9],
-  ["SPOTIFY", 21.9],
-  ["AMAZON MARKETPLACE", 349.0, 1, 3],
-  ["CARREFOUR HIPER", 412.33],
-  ["CINEMARK", 64.0],
-  ["PETZ PET SHOP", 189.9],
+const CARD_TX: MockTx[] = [
+  { description: "UBER *TRIP", amount: 23.9, type: "DEBIT", daysAgo: 1 },
+  { description: "NETFLIX.COM", amount: 55.9, type: "DEBIT", daysAgo: 3 },
+  { description: "SPOTIFY", amount: 21.9, type: "DEBIT", daysAgo: 5 },
+  { description: "AMAZON MARKETPLACE", amount: 349.0, type: "DEBIT", daysAgo: 7, installment: [1, 3] },
+  { description: "CARREFOUR HIPER", amount: 412.33, type: "DEBIT", daysAgo: 9 },
+  { description: "CINEMARK", amount: 64.0, type: "DEBIT", daysAgo: 11 },
+  { description: "PETZ PET SHOP", amount: 189.9, type: "DEBIT", daysAgo: 13 },
 ];
+
+// Somente no cartão Visa: pagamento da fatura (crédito no cartão), estorno e compras parceladas antigas
+const VISA_EXTRA_TX: MockTx[] = [
+  { description: "PAGAMENTO RECEBIDO", amount: 980.0, type: "CREDIT", daysAgo: 9, category: "Credit card payment" },
+  { description: "ESTORNO UBER *TRIP", amount: 23.9, type: "CREDIT", daysAgo: 2 },
+  // parcela 3/10 com a data da COMPRA ORIGINAL (sem billId): desloca 2 faturas
+  { description: "MAGAZINE LUIZA", amount: 129.9, type: "DEBIT", daysAgo: 70, installment: [3, 10] },
+  // parcela 2/12 com billId da fatura atual: vai para essa fatura
+  { description: "APPLE.COM/BILL", amount: 49.9, type: "DEBIT", daysAgo: 70, installment: [2, 12], currentBill: true },
+];
+
+function toPluggyTx(accountId: string, list: MockTx[], prefix: string, today: string): PluggyTransaction[] {
+  return list.map((t, i) => ({
+    id: `${accountId}-${prefix}-${i}`,
+    description: t.description,
+    amount: accountId.endsWith("-acc-corrente") && t.type === "DEBIT" ? -t.amount : t.amount,
+    type: t.type,
+    date: addDays(today, -t.daysAgo) + "T12:00:00.000Z",
+    category: t.category ?? null,
+    paymentData: t.method ? { paymentMethod: t.method } : null,
+    creditCardMetadata: t.installment
+      ? { installmentNumber: t.installment[0], totalInstallments: t.installment[1], billId: t.currentBill ? `${accountId}-bill-1` : null }
+      : null,
+  }));
+}
 
 export function createMockPluggy(): PluggyProvider {
   return {
@@ -64,16 +104,9 @@ export function createMockPluggy(): PluggyProvider {
     },
     async listTransactions(accountId): Promise<PluggyTransaction[]> {
       const today = todayISO();
-      if (accountId.endsWith("-acc-corrente")) {
-        return BANK_TX.map(([description, amount, type, method], i) => ({
-          id: `${accountId}-tx-${i}`, description, amount: type === "DEBIT" ? -amount : amount, type, date: addDays(today, -(i * 3 + 1)) + "T12:00:00.000Z",
-          paymentData: method ? { paymentMethod: method } : null,
-        }));
-      }
-      return CARD_TX.map(([description, amount, n, t], i) => ({
-        id: `${accountId}-tx-${i}`, description, amount, type: "DEBIT", date: addDays(today, -(i * 2 + 1)) + "T12:00:00.000Z",
-        creditCardMetadata: n ? { installmentNumber: n, totalInstallments: t } : null,
-      }));
+      if (accountId.endsWith("-acc-corrente")) return toPluggyTx(accountId, BANK_TX, "tx", today);
+      const base = toPluggyTx(accountId, CARD_TX, "tx", today);
+      return accountId.endsWith("-acc-visa") ? [...base, ...toPluggyTx(accountId, VISA_EXTRA_TX, "vx", today)] : base;
     },
     async listBills(accountId): Promise<PluggyBill[]> {
       const today = todayISO();

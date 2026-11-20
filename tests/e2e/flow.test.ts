@@ -13,7 +13,9 @@ import { freshTestDb } from "../support/db";
 import { authenticate, localVerifier } from "@/lib/auth/core";
 import { loadMembership } from "@/lib/auth/member";
 import { withService, withUser } from "@/lib/db";
-import { addDays, currentMonthStart, todayISO } from "@/lib/domain/dates";
+import { addDays, currentMonthStart, monthStartOf, todayISO } from "@/lib/domain/dates";
+import { assignInvoice, installmentSlot } from "@/lib/domain/invoices";
+import { summarize } from "@/lib/domain/reports";
 import { bancarioBarcodeToLine, buildBancarioBarcode, dateToFactor } from "@/lib/domain/boleto";
 import { createBill, listBills, payBill } from "@/lib/services/bills";
 import { createCard, createCardPurchase, listCards, listInvoices } from "@/lib/services/cards";
@@ -129,7 +131,7 @@ describe("4. contas a pagar com boleto/Pix", () => {
     const bill = await createBill(L(), { description: "Seguro do carro", amountCents: "45,00", dueDate: due, boleto: line, visibility: "compartilhado" });
     const listed = (await listBills(E())).find((b) => b.id === bill!.id);
     expect(listed?.boleto_line).toBe(line);
-    const entryId = await payBill(E(), bill!.id);
+    const { entryId } = await payBill(E(), bill!.id);
     expect(entryId).toBeTruthy();
   });
 });
@@ -168,7 +170,7 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
     }));
     const body = (await res.json()) as { ok: boolean; result: { accounts: number; cards: number; transactions: number; bills: number; billsWithCode: number } };
     expect(body.ok).toBe(true);
-    expect(body.result).toMatchObject({ accounts: 1, cards: 2, bills: 2, billsWithCode: 1 });
+    expect(body.result).toMatchObject({ accounts: 1, cards: 2, bills: 2, billsWithCode: 1, excluded: 3 });
     expect(body.result.transactions).toBeGreaterThanOrEqual(15);
     // reimportar não duplica
     const againRes = await pluggyWebhook(new Request(`http://localhost/api/pluggy/webhook?secret=${process.env.PLUGGY_WEBHOOK_SECRET}`, {
@@ -192,6 +194,57 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
     const bills = await withUser(esposa.id, (db) => db.query<{ description: string; boleto_line: string | null; pix_code: string | null }>("select description, boleto_line, pix_code from fam_bills where source = 'pluggy' order by description"));
     expect(bills.find((b) => b.description.includes("Master"))?.boleto_line).toBeNull();
     expect(bills.find((b) => b.description.includes("Visa"))?.boleto_line).toMatch(/^\d{47}$/);
+  });
+
+  it("pagamento de fatura e transferência própria não viram receita/despesa; estorno reduz despesa", async () => {
+    type Row = { description: string; kind: "receita" | "despesa"; amount_cents: number; cost_type: "fixa" | "variavel"; payment_method: string;
+      card_id: string | null; invoice_id: string | null; exclude_from_reports: boolean; exclude_reason: string | null };
+    const rows = await withUser(esposa.id, (db) => db.query<Row>(
+      "select description, kind, amount_cents, cost_type, payment_method, card_id, invoice_id, exclude_from_reports, exclude_reason from fam_entries where source = 'pluggy'"));
+    const by = (d: string) => rows.find((r) => r.description === d)!;
+    expect(by("PAG FATURA CARTAO SIMULADO VISA")).toMatchObject({ exclude_from_reports: true, exclude_reason: "pagamento_fatura", kind: "despesa" });
+    expect(by("TRANSF MESMA TITULARIDADE POUPANCA")).toMatchObject({ exclude_from_reports: true, exclude_reason: "transferencia" });
+    expect(by("PAGAMENTO RECEBIDO")).toMatchObject({ exclude_from_reports: true, exclude_reason: "pagamento_fatura", invoice_id: null });
+    expect(by("ESTORNO UBER *TRIP")).toMatchObject({ exclude_from_reports: false, kind: "receita" });
+    expect(by("ESTORNO UBER *TRIP").invoice_id).not.toBeNull();
+    // somente o que veio do Open Finance: receitas = salário + rendimento; despesas sem pagamentos/transferências e com o estorno abatido
+    const s = summarize(rows);
+    expect(s.receitas).toBe(651237);
+    expect(s.despesas).toBe(397431);
+    // o total da fatura abate o estorno mas não o pagamento
+    const visa = await withUser(esposa.id, (db) => db.one<{ id: string }>("select id from fam_cards where nickname = 'Cartão Simulado Visa'"));
+    const totals = await withService((db) => db.query<{ total_cents: number; s: number }>(
+      `select i.total_cents, coalesce(sum(case when e.kind='despesa' then e.amount_cents else -e.amount_cents end), 0)::bigint s
+         from fam_invoices i left join fam_entries e on e.invoice_id = i.id where i.card_id = $1 group by i.id`, [visa!.id]));
+    const allInvoices = totals.reduce((a, t) => a + t.total_cents, 0);
+    expect(allInvoices).toBe(129673 - 2390); // compras do Visa - estorno; o pagamento de R$ 980 não entra
+    for (const t of totals) expect(t.total_cents).toBe(Number(t.s));
+  });
+
+  it("parcelas do Open Finance: billId vai para a fatura do banco; sem billId desloca (n-1) meses", async () => {
+    const visa = await withUser(esposa.id, (db) => db.one<{ id: string; closing_day: number; due_day: number }>("select id, closing_day, due_day from fam_cards where nickname = 'Cartão Simulado Visa'"));
+    const cycle = { closingDay: visa!.closing_day, dueDay: visa!.due_day };
+    const get = (d: string) => withUser(esposa.id, (db) => db.one<{ budget_month: string; reference_month: string; installment_number: number }>(
+      "select e.budget_month, i.reference_month, e.installment_number from fam_entries e join fam_invoices i on i.id = e.invoice_id where e.description = $1", [d]));
+    const purchase = addDays(todayISO(), -70);
+    const magazine = await get("MAGAZINE LUIZA");
+    expect(magazine?.installment_number).toBe(3);
+    expect(magazine?.reference_month).toBe(installmentSlot(cycle, purchase, 3).referenceMonth);
+    expect(magazine?.reference_month).not.toBe(assignInvoice(cycle, purchase).referenceMonth); // não cai na fatura da compra original
+    const apple = await get("APPLE.COM/BILL");
+    expect(apple?.reference_month).toBe(monthStartOf(addDays(todayISO(), 12))); // fatura do bill informado pela Pluggy
+    expect(apple?.budget_month).toBe(apple?.reference_month);
+  });
+
+  it("pagar a fatura importada não cria despesa nova e marca a fatura do cartão como paga", async () => {
+    const bill = await withUser(esposa.id, (db) => db.one<{ id: string; card_id: string; due_date: string }>("select id, card_id, due_date from fam_bills where source = 'pluggy' and description like '%Visa%'"));
+    const before = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where owner_id = $1", [esposa.id]));
+    const r = await payBill(E(), bill!.id);
+    expect(r).toEqual({ entryId: null, invoiceMarkedPaid: true });
+    const after = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where owner_id = $1", [esposa.id]));
+    expect(after!.n).toBe(before!.n);
+    const inv = await withService((db) => db.one<{ status: string }>("select status from fam_invoices where card_id = $1 and reference_month = date_trunc('month', $2::date)::date", [bill!.card_id, bill!.due_date]));
+    expect(inv?.status).toBe("paga");
   });
 });
 

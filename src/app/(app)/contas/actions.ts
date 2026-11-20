@@ -21,8 +21,11 @@ export async function createBillAction(_p: ActionState, fd: FormData): Promise<A
 export async function payBillAction(_p: ActionState, fd: FormData): Promise<ActionState> {
   const c = await ctx();
   return run(async () => {
-    await payBill(c, String(fd.get("id") ?? ""));
-    return "Conta paga e lançamento registrado.";
+    const r = await payBill(c, String(fd.get("id") ?? ""));
+    if (r.entryId) return "Conta paga e lançamento registrado.";
+    return r.invoiceMarkedPaid
+      ? "Fatura marcada como paga (as compras do cartão já estavam lançadas — nenhuma despesa nova foi criada)."
+      : "Conta marcada como paga (fatura de cartão: nenhuma despesa nova foi criada).";
   }, PATHS);
 }
 

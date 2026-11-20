@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { withUser } from "../db";
 import { suggestCategory } from "../domain/categorize";
-import { addMonthsYM, monthStartOf, parseISODate, todayISO } from "../domain/dates";
-import { assignInvoice, invoiceForClosingMonth } from "../domain/invoices";
+import { monthStartOf, todayISO } from "../domain/dates";
+import { installmentSlot } from "../domain/invoices";
 import { normalizeText } from "../domain/text";
 import { parseStatementText, type StatementItem } from "../importers/statement-parser";
 import { sha256Hex } from "../security/crypto";
@@ -105,12 +105,7 @@ export async function approveReview(ctx: MemberCtx, id: string, raw?: unknown) {
     if (v.cardId) {
       const card = await db.one<{ closing_day: number; due_day: number }>("select closing_day, due_day from public.fam_cards where id = $1", [v.cardId]);
       if (!card) throw new Error("Cartão não encontrado");
-      const cycle = { closingDay: card.closing_day, dueDay: card.due_day };
-      const first = assignInvoice(cycle, v.occurredOn);
-      const shift = (item.installment_number ?? 1) - 1;
-      const { y, m } = parseISODate(first.closingDate);
-      const c = addMonthsYM(y, m, shift);
-      const slot = invoiceForClosingMonth(cycle, c.y, c.m);
+      const slot = installmentSlot({ closingDay: card.closing_day, dueDay: card.due_day }, v.occurredOn, item.installment_number);
       const invoiceId = await ensureInvoice(db, ctx.householdId, v.cardId, slot);
       const e = await db.one<{ id: string }>(
         `insert into public.fam_entries (household_id, owner_id, visibility, kind, description, amount_cents, occurred_on, budget_month, category_id,

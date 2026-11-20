@@ -9,7 +9,8 @@ import "server-only";
 import { withService, withUser, type Db } from "../db";
 import { suggestCategory } from "../domain/categorize";
 import { addDays, monthStartOf, todayISO } from "../domain/dates";
-import { assignInvoice } from "../domain/invoices";
+import { installmentSlot, slotForDueDate } from "../domain/invoices";
+import { classifyTransfer } from "../domain/transfers";
 import { decimalToCents } from "../domain/money";
 import { ensureInvoice } from "../services/cards";
 import { extractPaymentCodes } from "./codes";
@@ -40,6 +41,8 @@ export interface SyncResult {
   accounts: number;
   cards: number;
   transactions: number;
+  /** transações importadas como pagamento de fatura / transferência (fora dos relatórios) */
+  excluded: number;
   bills: number;
   billsWithCode: number;
 }
@@ -62,7 +65,7 @@ export async function syncItem(itemId: string, provider: PluggyProvider, now = n
   const accounts = await provider.listAccounts(itemId);
   const today = todayISO(now);
   const ctx = { userId: owner.user_id, householdId: owner.household_id };
-  const result: SyncResult = { accounts: 0, cards: 0, transactions: 0, bills: 0, billsWithCode: 0 };
+  const result: SyncResult = { accounts: 0, cards: 0, transactions: 0, excluded: 0, bills: 0, billsWithCode: 0 };
 
   // Busca dados externos antes de abrir a transação do banco.
   const data = [] as { acc: PluggyAccount; txs: Awaited<ReturnType<PluggyProvider["listTransactions"]>>; bills: Awaited<ReturnType<PluggyProvider["listBills"]>> }[];
@@ -80,25 +83,38 @@ export async function syncItem(itemId: string, provider: PluggyProvider, now = n
     for (const { acc, txs, bills } of data) {
       if (acc.type === "CREDIT") {
         const card = await upsertCard(db, ctx.householdId, acc);
+        const cycle = { closingDay: card.closing_day, dueDay: card.due_day };
         result.cards++;
+        const billDue = new Map(bills.map((b) => [b.id, String(b.dueDate).slice(0, 10)]));
         for (const t of txs) {
           const amount = Math.abs(decimalToCents(t.amount));
           if (!amount) continue;
-          const kind = t.type === "CREDIT" ? "receita" : "despesa"; // crédito no cartão = estorno
+          const kind = t.type === "CREDIT" ? "receita" : "despesa"; // crédito no cartão = pagamento da fatura ou estorno
           const date = t.date.slice(0, 10);
-          const slot = assignInvoice({ closingDay: card.closing_day, dueDay: card.due_day }, date);
-          const invoiceId = await ensureInvoice(db, ctx.householdId, card.id, slot);
+          const reason = classifyTransfer({ accountType: "CREDIT", type: t.type, description: t.description, category: t.category });
           const n = t.creditCardMetadata?.installmentNumber ?? null, tot = t.creditCardMetadata?.totalInstallments ?? null;
-          const validInst = n && tot && tot >= 1 && tot <= 48 && n >= 1 && n <= tot;
+          const validInst = Boolean(n && tot && tot >= 1 && tot <= 48 && n >= 1 && n <= tot);
+          let invoiceId: string | null = null;
+          let budgetMonth = monthStartOf(date);
+          if (!reason) {
+            // parcela: usa a fatura informada pelo banco (billId) ou desloca (n-1) meses a partir da compra original
+            const due = t.creditCardMetadata?.billId ? billDue.get(t.creditCardMetadata.billId) : undefined;
+            const slot = due ? slotForDueDate(cycle, due) : installmentSlot(cycle, date, validInst ? n : 1);
+            invoiceId = await ensureInvoice(db, ctx.householdId, card.id, slot);
+            budgetMonth = slot.referenceMonth;
+          }
+          // pagamento da fatura: fica no cartão, fora de fatura e dos relatórios (não abate o total da fatura)
           const r = await db.one(
             `insert into public.fam_entries (household_id, owner_id, visibility, kind, description, amount_cents, occurred_on, budget_month, category_id,
-                payment_method, cost_type, card_id, invoice_id, installment_number, installment_total, source, external_id)
-             values ($1, auth.uid(), $2, $3, $4, $5, $6, $7, $8, 'cartao_credito', 'variavel', $9, $10, $11, $12, 'pluggy', $13)
+                payment_method, cost_type, card_id, invoice_id, installment_number, installment_total, source, external_id, exclude_from_reports, exclude_reason)
+             values ($1, auth.uid(), $2, $3, $4, $5, $6, $7, $8, 'cartao_credito', 'variavel', $9, $10, $11, $12, 'pluggy', $13, $14, $15)
              on conflict (household_id, source, external_id) where external_id is not null do nothing returning id`,
-            [ctx.householdId, card.visibility, kind, t.description.slice(0, 140), amount, date, slot.referenceMonth,
-             suggestCategory(t.description, kind, history, cats), card.id, invoiceId, validInst ? n : null, validInst ? tot : null, t.id],
+            [ctx.householdId, card.visibility, kind, t.description.slice(0, 140), amount, date, budgetMonth,
+             reason ? null : suggestCategory(t.description, kind, history, cats), card.id, invoiceId,
+             validInst ? n : null, validInst ? tot : null, t.id, Boolean(reason), reason],
           );
           if (r) result.transactions++;
+          if (r && reason) result.excluded++;
         }
         for (const b of bills) {
           const due = String(b.dueDate).slice(0, 10);
@@ -128,15 +144,19 @@ export async function syncItem(itemId: string, provider: PluggyProvider, now = n
           if (!amount) continue;
           const kind = t.type === "CREDIT" || t.amount > 0 ? "receita" : "despesa";
           const date = t.date.slice(0, 10);
+          // pagamento de fatura de cartão / transferência entre contas próprias: não é receita nem despesa
+          const reason = classifyTransfer({ accountType: "BANK", type: kind === "receita" ? "CREDIT" : "DEBIT", description: t.description, category: t.category });
           const r = await db.one(
             `insert into public.fam_entries (household_id, owner_id, visibility, kind, description, amount_cents, occurred_on, budget_month, category_id,
-                payment_method, cost_type, bank_account_id, source, external_id)
-             values ($1, auth.uid(), $2, $3, $4, $5, $6, $7, $8, $9, 'variavel', $10, 'pluggy', $11)
+                payment_method, cost_type, bank_account_id, source, external_id, exclude_from_reports, exclude_reason)
+             values ($1, auth.uid(), $2, $3, $4, $5, $6, $7, $8, $9, 'variavel', $10, 'pluggy', $11, $12, $13)
              on conflict (household_id, source, external_id) where external_id is not null do nothing returning id`,
             [ctx.householdId, account.visibility, kind, t.description.slice(0, 140), amount, date, monthStartOf(date),
-             suggestCategory(t.description, kind, history, cats), methodFrom(t.paymentData?.paymentMethod), account.id, t.id],
+             reason ? null : suggestCategory(t.description, kind, history, cats), methodFrom(t.paymentData?.paymentMethod), account.id, t.id,
+             Boolean(reason), reason],
           );
           if (r) result.transactions++;
+          if (r && reason) result.excluded++;
         }
       }
     }

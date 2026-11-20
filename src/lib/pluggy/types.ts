@@ -33,7 +33,7 @@ export interface PluggyTransaction {
   date: string; // ISO
   type: "DEBIT" | "CREDIT" | string;
   category?: string | null;
-  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null } | null;
+  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null; billId?: string | null; purchaseDate?: string | null } | null;
   paymentData?: {
     paymentMethod?: string | null;
     boletoMetadata?: { digitableLine?: string | null; barcode?: string | null } | null;

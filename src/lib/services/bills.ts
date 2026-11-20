@@ -93,11 +93,33 @@ export async function createBill(ctx: MemberCtx, raw: unknown) {
   );
 }
 
-/** Marca como paga e registra o lançamento correspondente (em nome de quem pagou). */
-export async function payBill(ctx: MemberCtx, id: string, paidOn = todayISO()) {
+export interface PayBillResult {
+  entryId: string | null;
+  invoiceMarkedPaid: boolean;
+}
+
+/**
+ * Marca como paga.
+ * - Conta comum: registra o lançamento de despesa (em nome de quem pagou).
+ * - Fatura de cartão (card_id preenchido, ex.: importada do Open Finance): NÃO cria
+ *   despesa — as compras do cartão já foram lançadas; marca a fam_invoices
+ *   correspondente (mesmo cartão e vencimento/mês de referência) como paga.
+ */
+export async function payBill(ctx: MemberCtx, id: string, paidOn = todayISO()): Promise<PayBillResult> {
   return withUser(ctx.userId, async (db) => {
     const b = await db.one<BillRow>("select * from public.fam_bills where id = $1 and status = 'pendente'", [id]);
     if (!b) throw new Error("Conta não encontrada ou já paga");
+    if (b.card_id) {
+      await db.query("update public.fam_bills set status = 'paga', paid_at = now() where id = $1", [id]);
+      const inv = await db.query(
+        `update public.fam_invoices set status = 'paga', paid_at = now()
+          where card_id = $1 and status <> 'paga'
+            and (due_date = $2::date or reference_month = date_trunc('month', $2::date)::date)
+          returning id`,
+        [b.card_id, b.due_date],
+      );
+      return { entryId: null, invoiceMarkedPaid: inv.length > 0 };
+    }
     const method = b.boleto_line ? "boleto" : b.pix_code || b.pix_key ? "pix" : "transferencia";
     const entry = await db.one<{ id: string }>(
       `insert into public.fam_entries (household_id, owner_id, visibility, kind, description, amount_cents, occurred_on, budget_month,
@@ -106,7 +128,7 @@ export async function payBill(ctx: MemberCtx, id: string, paidOn = todayISO()) {
       [ctx.householdId, b.visibility, b.description, b.amount_cents, paidOn, monthStartOf(paidOn), b.category_id, method, b.cost_type],
     );
     await db.query("update public.fam_bills set status = 'paga', paid_at = now(), entry_id = $2 where id = $1", [id, entry!.id]);
-    return entry!.id;
+    return { entryId: entry!.id, invoiceMarkedPaid: false };
   });
 }
 
