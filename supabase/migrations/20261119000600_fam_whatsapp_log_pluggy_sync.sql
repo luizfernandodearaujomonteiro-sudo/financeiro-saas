@@ -31,3 +31,8 @@ create policy fam_wa_messages_select on public.fam_whatsapp_messages for select 
 grant update (status, last_sync_at, last_error, connector_name) on public.fam_pluggy_items to authenticated;
 create policy fam_pluggy_update on public.fam_pluggy_items for update to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Documentos de fatura: o dono atualiza apenas o resultado do processamento
+grant update (parsed_items, parse_error) on public.fam_invoice_documents to authenticated;
+create policy fam_invoice_documents_update on public.fam_invoice_documents for update to authenticated
+  using (owner_id = auth.uid()) with check (owner_id = auth.uid());
