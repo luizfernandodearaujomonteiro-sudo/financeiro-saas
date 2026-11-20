@@ -12,6 +12,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["unpdf"],
+  // upload de PDF de fatura (até 8 MB) via server action
+  experimental: { serverActions: { bodySizeLimit: "9mb" } },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
