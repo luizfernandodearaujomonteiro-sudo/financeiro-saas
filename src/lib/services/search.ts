@@ -55,20 +55,20 @@ export async function saveSearch(ctx: MemberCtx, query: string, filters: Record<
   const q = query.trim().slice(0, 120);
   if (!q) return;
   await withUser(ctx.userId, async (db) => {
-    await db.query("delete from public.fam_search_history where user_id = auth.uid() and lower(query) = lower($1)", [q]);
-    await db.query("insert into public.fam_search_history (user_id, household_id, query, filters) values (auth.uid(), $1, $2, $3)", [ctx.householdId, q, JSON.stringify(filters)]);
+    await db.query("delete from public.fin_financeiro_search_history where user_id = auth.uid() and lower(query) = lower($1)", [q]);
+    await db.query("insert into public.fin_financeiro_search_history (user_id, household_id, query, filters) values (auth.uid(), $1, $2, $3)", [ctx.householdId, q, JSON.stringify(filters)]);
     await db.query(
-      "delete from public.fam_search_history where user_id = auth.uid() and id not in (select id from public.fam_search_history where user_id = auth.uid() order by created_at desc limit 15)",
+      "delete from public.fin_financeiro_search_history where user_id = auth.uid() and id not in (select id from public.fin_financeiro_search_history where user_id = auth.uid() order by created_at desc limit 15)",
     );
   });
 }
 
 export function recentSearches(ctx: MemberCtx) {
   return withUser(ctx.userId, (db) =>
-    db.query<{ id: string; query: string; created_at: string }>("select id, query, created_at from public.fam_search_history where user_id = auth.uid() order by created_at desc limit 10"),
+    db.query<{ id: string; query: string; created_at: string }>("select id, query, created_at from public.fin_financeiro_search_history where user_id = auth.uid() order by created_at desc limit 10"),
   );
 }
 
 export async function clearSearchHistory(ctx: MemberCtx) {
-  await withUser(ctx.userId, (db) => db.query("delete from public.fam_search_history where user_id = auth.uid()"));
+  await withUser(ctx.userId, (db) => db.query("delete from public.fin_financeiro_search_history where user_id = auth.uid()"));
 }

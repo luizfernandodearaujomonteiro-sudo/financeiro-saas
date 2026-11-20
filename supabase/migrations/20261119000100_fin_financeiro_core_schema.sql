@@ -1,10 +1,10 @@
 -- =====================================================================
--- Financeiro Família — schema principal (prefixo fam_)
+-- Financeiro Família — schema principal (prefixo fin_financeiro_)
 --
 -- ATENÇÃO: este projeto Supabase é COMPARTILHADO com outros apps.
--- Esta migration é ADITIVA: só cria objetos novos com prefixo fam_.
+-- Esta migration é ADITIVA: só cria objetos novos com prefixo fin_financeiro_.
 -- Não altera, renomeia, apaga nem escreve em nenhuma tabela existente
--- (auth.users é apenas referenciado por FK a partir de tabelas fam_).
+-- (auth.users é apenas referenciado por FK a partir de tabelas fin_financeiro_).
 --
 -- Valores monetários SEMPRE em centavos inteiros (bigint). Nunca float.
 -- Datas de calendário em `date`; "hoje" é calculado em America/Sao_Paulo.
@@ -13,36 +13,36 @@
 -- ---------------------------------------------------------------------
 -- Famílias, perfis e membros
 -- ---------------------------------------------------------------------
-create table if not exists public.fam_households (
+create table if not exists public.fin_financeiro_households (
   id          uuid primary key default gen_random_uuid(),
   name        text not null check (char_length(name) between 1 and 80),
   created_at  timestamptz not null default now()
 );
 
 -- Perfil do app (auth.users é compartilhado: ter conta NÃO dá acesso a nada;
--- o acesso vem exclusivamente de fam_household_members).
-create table if not exists public.fam_profiles (
+-- o acesso vem exclusivamente de fin_financeiro_household_members).
+create table if not exists public.fin_financeiro_profiles (
   id            uuid primary key references auth.users (id) on delete cascade,
   display_name  text not null check (char_length(display_name) between 1 and 60),
   created_at    timestamptz not null default now()
 );
 
-create table if not exists public.fam_household_members (
-  household_id  uuid not null references public.fam_households (id) on delete cascade,
-  user_id       uuid not null references public.fam_profiles (id) on delete cascade,
+create table if not exists public.fin_financeiro_household_members (
+  household_id  uuid not null references public.fin_financeiro_households (id) on delete cascade,
+  user_id       uuid not null references public.fin_financeiro_profiles (id) on delete cascade,
   role          text not null check (role in ('owner', 'member')),
   created_at    timestamptz not null default now(),
   primary key (household_id, user_id),
   unique (user_id)  -- cada login pertence a no máximo uma família
 );
 
-create table if not exists public.fam_household_invites (
+create table if not exists public.fin_financeiro_household_invites (
   id            uuid primary key default gen_random_uuid(),
-  household_id  uuid not null references public.fam_households (id) on delete cascade,
+  household_id  uuid not null references public.fin_financeiro_households (id) on delete cascade,
   token_hash    text not null unique,
-  created_by    uuid not null references public.fam_profiles (id) on delete cascade,
+  created_by    uuid not null references public.fin_financeiro_profiles (id) on delete cascade,
   expires_at    timestamptz not null,
-  accepted_by   uuid references public.fam_profiles (id) on delete set null,
+  accepted_by   uuid references public.fin_financeiro_profiles (id) on delete set null,
   accepted_at   timestamptz,
   created_at    timestamptz not null default now()
 );
@@ -50,9 +50,9 @@ create table if not exists public.fam_household_invites (
 -- ---------------------------------------------------------------------
 -- Categorias (compartilhadas pela família)
 -- ---------------------------------------------------------------------
-create table if not exists public.fam_categories (
+create table if not exists public.fin_financeiro_categories (
   id            uuid primary key default gen_random_uuid(),
-  household_id  uuid not null references public.fam_households (id) on delete cascade,
+  household_id  uuid not null references public.fin_financeiro_households (id) on delete cascade,
   name          text not null check (char_length(name) between 1 and 60),
   kind          text not null check (kind in ('receita', 'despesa')),
   color         text not null default '#6366f1' check (color ~ '^#[0-9a-fA-F]{6}$'),
@@ -60,12 +60,12 @@ create table if not exists public.fam_categories (
   created_at    timestamptz not null default now(),
   unique (household_id, id)
 );
-create unique index if not exists fam_categories_unique_name on public.fam_categories (household_id, kind, lower(name));
+create unique index if not exists fin_financeiro_categories_unique_name on public.fin_financeiro_categories (household_id, kind, lower(name));
 
 -- ---------------------------------------------------------------------
 -- Contas e cartões (dono + visibilidade)
 -- ---------------------------------------------------------------------
-create table if not exists public.fam_bank_accounts (
+create table if not exists public.fin_financeiro_bank_accounts (
   id                 uuid primary key default gen_random_uuid(),
   household_id       uuid not null,
   owner_id           uuid not null,
@@ -77,10 +77,10 @@ create table if not exists public.fam_bank_accounts (
   pluggy_account_id  text unique,
   created_at         timestamptz not null default now(),
   unique (household_id, id),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade
 );
 
-create table if not exists public.fam_cards (
+create table if not exists public.fin_financeiro_cards (
   id                 uuid primary key default gen_random_uuid(),
   household_id       uuid not null,
   owner_id           uuid not null,
@@ -95,10 +95,10 @@ create table if not exists public.fam_cards (
   pluggy_account_id  text unique,
   created_at         timestamptz not null default now(),
   unique (household_id, id),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade
 );
 
-create table if not exists public.fam_invoices (
+create table if not exists public.fin_financeiro_invoices (
   id               uuid primary key default gen_random_uuid(),
   household_id     uuid not null,
   card_id          uuid not null,
@@ -112,11 +112,11 @@ create table if not exists public.fam_invoices (
   unique (card_id, reference_month),
   unique (household_id, id),
   check (due_date >= closing_date),
-  foreign key (household_id, card_id) references public.fam_cards (household_id, id) on delete cascade
+  foreign key (household_id, card_id) references public.fin_financeiro_cards (household_id, id) on delete cascade
 );
 
 -- Compra no cartão (agrupa as parcelas)
-create table if not exists public.fam_card_purchases (
+create table if not exists public.fin_financeiro_card_purchases (
   id                uuid primary key default gen_random_uuid(),
   household_id      uuid not null,
   owner_id          uuid not null,
@@ -129,15 +129,15 @@ create table if not exists public.fam_card_purchases (
   category_id       uuid,
   created_at        timestamptz not null default now(),
   unique (household_id, id),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade,
-  foreign key (household_id, card_id) references public.fam_cards (household_id, id) on delete cascade,
-  foreign key (household_id, category_id) references public.fam_categories (household_id, id) on delete set null (category_id)
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade,
+  foreign key (household_id, card_id) references public.fin_financeiro_cards (household_id, id) on delete cascade,
+  foreign key (household_id, category_id) references public.fin_financeiro_categories (household_id, id) on delete set null (category_id)
 );
 
 -- ---------------------------------------------------------------------
 -- Lançamentos (parcelas de cartão também são lançamentos)
 -- ---------------------------------------------------------------------
-create table if not exists public.fam_entries (
+create table if not exists public.fin_financeiro_entries (
   id                  uuid primary key default gen_random_uuid(),
   household_id        uuid not null,
   owner_id            uuid not null,
@@ -166,28 +166,28 @@ create table if not exists public.fam_entries (
   exclude_reason      text check (exclude_reason is null or exclude_reason in ('pagamento_fatura', 'transferencia', 'manual')),
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade,
-  foreign key (household_id, category_id) references public.fam_categories (household_id, id) on delete set null (category_id),
-  foreign key (household_id, bank_account_id) references public.fam_bank_accounts (household_id, id) on delete set null (bank_account_id),
-  foreign key (household_id, card_id) references public.fam_cards (household_id, id) on delete set null (card_id),
-  foreign key (household_id, invoice_id) references public.fam_invoices (household_id, id) on delete set null (invoice_id),
-  foreign key (household_id, purchase_id) references public.fam_card_purchases (household_id, id) on delete cascade,
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade,
+  foreign key (household_id, category_id) references public.fin_financeiro_categories (household_id, id) on delete set null (category_id),
+  foreign key (household_id, bank_account_id) references public.fin_financeiro_bank_accounts (household_id, id) on delete set null (bank_account_id),
+  foreign key (household_id, card_id) references public.fin_financeiro_cards (household_id, id) on delete set null (card_id),
+  foreign key (household_id, invoice_id) references public.fin_financeiro_invoices (household_id, id) on delete set null (invoice_id),
+  foreign key (household_id, purchase_id) references public.fin_financeiro_card_purchases (household_id, id) on delete cascade,
   check (card_id is null or payment_method in ('cartao_credito', 'cartao_debito')),
   check (
     (installment_total is null and installment_number is null)
     or (installment_total between 1 and 48 and installment_number between 1 and installment_total)
   )
 );
-create index if not exists fam_entries_household_month on public.fam_entries (household_id, budget_month);
-create index if not exists fam_entries_owner on public.fam_entries (owner_id);
-create index if not exists fam_entries_invoice on public.fam_entries (invoice_id);
-create unique index if not exists fam_entries_external_unique
-  on public.fam_entries (household_id, source, external_id) where external_id is not null;
+create index if not exists fin_financeiro_entries_household_month on public.fin_financeiro_entries (household_id, budget_month);
+create index if not exists fin_financeiro_entries_owner on public.fin_financeiro_entries (owner_id);
+create index if not exists fin_financeiro_entries_invoice on public.fin_financeiro_entries (invoice_id);
+create unique index if not exists fin_financeiro_entries_external_unique
+  on public.fin_financeiro_entries (household_id, source, external_id) where external_id is not null;
 
 -- ---------------------------------------------------------------------
 -- Importação de faturas: documentos (PDF) e fila de revisão
 -- ---------------------------------------------------------------------
-create table if not exists public.fam_invoice_documents (
+create table if not exists public.fin_financeiro_invoice_documents (
   id                uuid primary key default gen_random_uuid(),
   household_id      uuid not null,
   owner_id          uuid not null,
@@ -202,11 +202,11 @@ create table if not exists public.fam_invoice_documents (
   created_at        timestamptz not null default now(),
   unique (owner_id, sha256),
   unique (household_id, id),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade,
-  foreign key (household_id, card_id) references public.fam_cards (household_id, id) on delete set null (card_id)
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade,
+  foreign key (household_id, card_id) references public.fin_financeiro_cards (household_id, id) on delete set null (card_id)
 );
 
-create table if not exists public.fam_review_queue (
+create table if not exists public.fin_financeiro_review_queue (
   id                  uuid primary key default gen_random_uuid(),
   household_id        uuid not null,
   owner_id            uuid not null,
@@ -222,23 +222,23 @@ create table if not exists public.fam_review_queue (
   installment_total   smallint,
   suggested_category  uuid,
   dedupe_hash         text not null,
-  entry_id            uuid references public.fam_entries (id) on delete set null,
+  entry_id            uuid references public.fin_financeiro_entries (id) on delete set null,
   created_at          timestamptz not null default now(),
   reviewed_at         timestamptz,
   unique (household_id, dedupe_hash),
-  foreign key (household_id, owner_id) references public.fam_household_members (household_id, user_id) on delete cascade,
-  foreign key (household_id, document_id) references public.fam_invoice_documents (household_id, id) on delete set null (document_id),
-  foreign key (household_id, card_id) references public.fam_cards (household_id, id) on delete set null (card_id),
-  foreign key (household_id, suggested_category) references public.fam_categories (household_id, id) on delete set null (suggested_category)
+  foreign key (household_id, owner_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade,
+  foreign key (household_id, document_id) references public.fin_financeiro_invoice_documents (household_id, id) on delete set null (document_id),
+  foreign key (household_id, card_id) references public.fin_financeiro_cards (household_id, id) on delete set null (card_id),
+  foreign key (household_id, suggested_category) references public.fin_financeiro_categories (household_id, id) on delete set null (suggested_category)
 );
-create index if not exists fam_review_queue_owner_status on public.fam_review_queue (owner_id, status);
+create index if not exists fin_financeiro_review_queue_owner_status on public.fin_financeiro_review_queue (owner_id, status);
 
 -- ---------------------------------------------------------------------
 -- Integrações
 -- ---------------------------------------------------------------------
--- Gmail: status visível ao próprio usuário; token fica em fam_oauth_tokens.
-create table if not exists public.fam_gmail_connections (
-  user_id       uuid primary key references public.fam_profiles (id) on delete cascade,
+-- Gmail: status visível ao próprio usuário; token fica em fin_financeiro_oauth_tokens.
+create table if not exists public.fin_financeiro_gmail_connections (
+  user_id       uuid primary key references public.fin_financeiro_profiles (id) on delete cascade,
   email         text,
   status        text not null default 'conectado' check (status in ('conectado', 'erro', 'desconectado')),
   last_sync_at  timestamptz,
@@ -247,8 +247,8 @@ create table if not exists public.fam_gmail_connections (
 );
 
 -- Tokens OAuth cifrados na aplicação (AES-256-GCM). SEM acesso para anon/authenticated.
-create table if not exists public.fam_oauth_tokens (
-  user_id            uuid not null references public.fam_profiles (id) on delete cascade,
+create table if not exists public.fin_financeiro_oauth_tokens (
+  user_id            uuid not null references public.fin_financeiro_profiles (id) on delete cascade,
   provider           text not null check (provider in ('gmail')),
   refresh_token_enc  text not null,
   scope              text,
@@ -257,7 +257,7 @@ create table if not exists public.fam_oauth_tokens (
 );
 
 -- Pluggy (Open Finance): conexão POR MEMBRO; guardamos só o item id.
-create table if not exists public.fam_pluggy_items (
+create table if not exists public.fin_financeiro_pluggy_items (
   id              uuid primary key default gen_random_uuid(),
   household_id    uuid not null,
   user_id         uuid not null,
@@ -268,40 +268,40 @@ create table if not exists public.fam_pluggy_items (
   last_sync_at    timestamptz,
   last_error      text,
   created_at      timestamptz not null default now(),
-  foreign key (household_id, user_id) references public.fam_household_members (household_id, user_id) on delete cascade
+  foreign key (household_id, user_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade
 );
 
 -- WhatsApp: configuração do assistente da família (campos não secretos)
-create table if not exists public.fam_whatsapp_config (
-  household_id          uuid primary key references public.fam_households (id) on delete cascade,
+create table if not exists public.fin_financeiro_whatsapp_config (
+  household_id          uuid primary key references public.fin_financeiro_households (id) on delete cascade,
   provider              text not null default 'evolution' check (provider in ('evolution', 'meta', 'simulator')),
   display_number        text,
   evolution_base_url    text check (evolution_base_url is null or evolution_base_url ~ '^https://'),
   evolution_instance    text check (evolution_instance is null or evolution_instance ~ '^[A-Za-z0-9_-]{1,64}$'),
   meta_phone_number_id  text,
-  updated_by            uuid references public.fam_profiles (id) on delete set null,
+  updated_by            uuid references public.fin_financeiro_profiles (id) on delete set null,
   updated_at            timestamptz not null default now()
 );
 
 -- Segredos do WhatsApp cifrados (AES-256-GCM). SEM acesso direto para clientes.
-create table if not exists public.fam_whatsapp_secrets (
-  household_id           uuid primary key references public.fam_households (id) on delete cascade,
+create table if not exists public.fin_financeiro_whatsapp_secrets (
+  household_id           uuid primary key references public.fin_financeiro_households (id) on delete cascade,
   evolution_token_enc    text,
   meta_access_token_enc  text,
   updated_at             timestamptz not null default now()
 );
 
 -- Telefone de cada membro -> perfil
-create table if not exists public.fam_whatsapp_numbers (
+create table if not exists public.fin_financeiro_whatsapp_numbers (
   user_id       uuid primary key,
   household_id  uuid not null,
   phone_e164    text not null unique check (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
   created_at    timestamptz not null default now(),
-  foreign key (household_id, user_id) references public.fam_household_members (household_id, user_id) on delete cascade
+  foreign key (household_id, user_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade
 );
 
 -- Idempotência de mensagens recebidas (somente servidor)
-create table if not exists public.fam_whatsapp_inbound (
+create table if not exists public.fin_financeiro_whatsapp_inbound (
   message_id   text primary key,
   provider     text not null,
   from_phone   text not null,
@@ -309,9 +309,9 @@ create table if not exists public.fam_whatsapp_inbound (
 );
 
 -- Evita alertas/lembretes duplicados (somente servidor)
-create table if not exists public.fam_notification_log (
+create table if not exists public.fin_financeiro_notification_log (
   id       bigint generated always as identity primary key,
-  user_id  uuid not null references public.fam_profiles (id) on delete cascade,
+  user_id  uuid not null references public.fin_financeiro_profiles (id) on delete cascade,
   kind     text not null,
   ref      text not null,
   sent_at  timestamptz not null default now(),
@@ -319,20 +319,20 @@ create table if not exists public.fam_notification_log (
 );
 
 -- Tentativas de login (somente via funções SECURITY DEFINER)
-create table if not exists public.fam_login_attempts (
+create table if not exists public.fin_financeiro_login_attempts (
   id          bigint generated always as identity primary key,
   key_hash    text not null,
   success     boolean not null,
   created_at  timestamptz not null default now()
 );
-create index if not exists fam_login_attempts_key_time on public.fam_login_attempts (key_hash, created_at desc);
+create index if not exists fin_financeiro_login_attempts_key_time on public.fin_financeiro_login_attempts (key_hash, created_at desc);
 
 -- Investimentos: vínculo membro -> invest_profiles (app invest-tracker, somente leitura)
-create table if not exists public.fam_invest_links (
+create table if not exists public.fin_financeiro_invest_links (
   user_id            uuid primary key,
   household_id       uuid not null,
   invest_profile_id  uuid not null unique,
   visibility         text not null default 'pessoal' check (visibility in ('pessoal', 'compartilhado')),
   created_at         timestamptz not null default now(),
-  foreign key (household_id, user_id) references public.fam_household_members (household_id, user_id) on delete cascade
+  foreign key (household_id, user_id) references public.fin_financeiro_household_members (household_id, user_id) on delete cascade
 );

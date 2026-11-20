@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const { member } = await requireCtx();
-  const pending = await withUser(member.userId, (db) => db.one<{ n: number }>("select count(*)::int as n from public.fam_review_queue where owner_id = auth.uid() and status = 'pendente'"));
+  const pending = await withUser(member.userId, (db) => db.one<{ n: number }>("select count(*)::int as n from public.fin_financeiro_review_queue where owner_id = auth.uid() and status = 'pendente'"));
   const simulator = env.simulatorEnabled;
   const themeMode = decodeTheme((await cookies()).get(THEME_COOKIE)?.value).mode;
   return (

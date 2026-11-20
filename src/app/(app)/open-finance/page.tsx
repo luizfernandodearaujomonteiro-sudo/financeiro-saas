@@ -51,7 +51,7 @@ export default async function OpenFinancePage() {
     withUser(ctx.userId, (db) =>
       db.query<{ id: string; description: string; amount_cents: number; kind: "receita" | "despesa"; occurred_on: string; visibility: "pessoal" | "compartilhado"; category_name: string | null }>(
         `select e.id, e.description, e.amount_cents, e.kind, e.occurred_on, e.visibility, c.name as category_name
-           from public.fam_entries e left join public.fam_categories c on c.id = e.category_id
+           from public.fin_financeiro_entries e left join public.fin_financeiro_categories c on c.id = e.category_id
           where e.source = 'pluggy' and e.owner_id = auth.uid() order by e.occurred_on desc, e.created_at desc limit 30`,
       ),
     ),

@@ -9,7 +9,7 @@ export function errorMessage(e: unknown): string {
   if (e instanceof Error) {
     // erros do banco/RLS não vazam detalhes internos
     if (/row-level security|permission denied/i.test(e.message)) return "Você não tem permissão para isso.";
-    const m = /fam: (.+)$/.exec(e.message);
+    const m = /fin_financeiro: (.+)$/.exec(e.message);
     if (m) return m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1);
     if (/NEXT_REDIRECT/.test(e.message)) throw e;
     return e.message.length < 160 ? e.message : "Não foi possível concluir a operação.";

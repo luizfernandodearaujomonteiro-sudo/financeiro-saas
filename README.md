@@ -11,8 +11,8 @@ Interface em português, escura por padrão (com tema claro e automático por ho
 ## Stack
 
 - **Next.js 16** (App Router, TypeScript strict) — um único app, pronto para a **Vercel**
-- **Supabase**: Postgres + Auth (+ Storage) — RLS em todas as tabelas `fam_`
-- Migrations SQL **aditivas** em `supabase/migrations` (somente objetos `fam_`)
+- **Supabase**: Postgres + Auth (+ Storage) — RLS em todas as tabelas `fin_financeiro_`
+- Migrations SQL **aditivas** em `supabase/migrations` (somente objetos `fin_financeiro_`)
 - Crons da Vercel em `vercel.json`
 - Tailwind v4, `motion`, `lucide-react`, `zod`, `pg`
 - Testes: Vitest (unitários) + Postgres **local** real (`embedded-postgres`) para RLS e ponta a ponta + Playwright (fumaça no navegador e capturas)
@@ -39,13 +39,13 @@ Comandos úteis:
 | Comando | O que faz |
 |---|---|
 | `npm run db:local:start` / `db:local:stop` / `db:local:status` | Postgres local (dados em `.local/pgdata`, gitignored) |
-| `npm run db:local:migrate` | aplica shim local + migrations `fam_` + stubs `invest_*` locais |
+| `npm run db:local:migrate` | aplica shim local + migrations `fin_financeiro_` + stubs `invest_*` locais |
 | `npm run db:local:seed` / `db:local:reset` | dados de demonstração / recria tudo do zero |
 | `npm run setup:local` | gera `.env.local` com segredos aleatórios (não sobrescreve) |
 | `npm run typecheck` · `npm run lint` · `npm run build` | verificações |
 | `npm test` | 92 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos, redirect…) |
-| `npm run test:rls` | 56 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fam_app` |
-| `npm run test:e2e` | 31 testes ponta a ponta locais (login, cartões, revisão, Pluggy mock, WhatsApp…), como `fam_app` |
+| `npm run test:rls` | 56 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fin_financeiro_app` |
+| `npm run test:e2e` | 31 testes ponta a ponta locais (login, cartões, revisão, Pluggy mock, WhatsApp…), como `fin_financeiro_app` |
 | `npm run screenshots` | fumaça no navegador (Playwright) + capturas em `docs/screenshots/` (requer `npm run build`; `npx playwright install chromium` uma vez) |
 | `npm run check` | typecheck + lint + todos os testes + build |
 
@@ -53,27 +53,27 @@ Comandos úteis:
 
 Resumo — detalhes e alertas em [docs/ENTREGA.md › Go-live](docs/ENTREGA.md#go-live-supabase--vercel):
 
-1. **Revise** os SQL de `supabase/migrations/` (7 arquivos; somente `fam_` + schema `fam_private`,
+1. **Revise** os SQL de `supabase/migrations/` (7 arquivos; somente `fin_financeiro_` + schema `fin_financeiro_private`,
    aditivos) e aplique no projeto `bqbmvurwmsgitundbdxt` pelo SQL Editor (um arquivo por vez, em
    ordem) — é um **banco de produção compartilhado** com outros apps.
-2. Crie o papel de conexão do app com `supabase/manual/fam_app_role.sql` (troque a senha
+2. Crie o papel de conexão do app com `supabase/manual/fin_financeiro_app_role.sql` (troque a senha
    placeholder na hora; não commite).
-3. Crie no Storage o bucket **privado** `fam_faturas`.
+3. Crie no Storage o bucket **privado** `fin_financeiro_faturas`.
 4. Crie a família: `DATABASE_URL_ADMIN=... npm run bootstrap -- --owner-email ... --member-email ... --yes`.
-5. Na Vercel, cadastre as variáveis de `.env.example` — `DATABASE_URL` com o papel **`fam_app`**
+5. Na Vercel, cadastre as variáveis de `.env.example` — `DATABASE_URL` com o papel **`fin_financeiro_app`**
    no pooler (porta 6543); nunca `DATABASE_URL_ADMIN` nem `LOCAL_DEV_AUTH` — faça o deploy e
    confira os crons.
 6. Configure os webhooks (WhatsApp/Evolution; Pluggy com header `x-webhook-secret`) e o OAuth do Google.
 
 ## Segurança (resumo)
 
-- **RLS em todas as tabelas `fam_`**, por pertencimento (`fam_household_members`). O `auth.users`
+- **RLS em todas as tabelas `fin_financeiro_`**, por pertencimento (`fin_financeiro_household_members`). O `auth.users`
   é compartilhado com outros apps: **cadastro não concede nada**; vínculo só por convite/bootstrap.
-- O app conecta com o papel dedicado **`fam_app` (NOINHERIT)**: sem `SET ROLE` ele não tem
+- O app conecta com o papel dedicado **`fin_financeiro_app` (NOINHERIT)**: sem `SET ROLE` ele não tem
   privilégio. Cada requisição do painel roda como `authenticated` com o `sub` do usuário (o mesmo
   mecanismo do PostgREST) → a RLS vale também no servidor. `service_role` (só DML) apenas em
   crons/webhooks/log de mensagens (lista e limitações no ENTREGA.md).
-- RPCs chamadas pelo papel `anon` ficam no schema `fam_private`, fora da API REST do Supabase.
+- RPCs chamadas pelo papel `anon` ficam no schema `fin_financeiro_private`, fora da API REST do Supabase.
 - Sessão em **cookies httpOnly** (`@supabase/ssr`), nada em `localStorage`.
 - Limite de tentativas de login (5 por e-mail / 20 por IP em 15 min), senha mínima de 12 caracteres.
 - Dinheiro em **centavos inteiros** de ponta a ponta; datas no fuso `America/Sao_Paulo`.
@@ -93,7 +93,7 @@ src/lib/services/   acesso a dados com RLS do usuário
 src/lib/whatsapp/   provedores (Evolution, Meta, simulador), webhook, comandos, alertas
 src/lib/pluggy/     cliente Pluggy, mock, importação por membro
 src/lib/gmail/      OAuth e sincronização de faturas
-supabase/migrations/   SQL aditivo (fam_) para o Supabase
+supabase/migrations/   SQL aditivo (fin_financeiro_) para o Supabase
 supabase/local/        shim do Supabase e stubs invest_* SOMENTE locais
 scripts/            Postgres local, seed, bootstrap, import de bills, screenshots
 tests/              unit, rls, e2e

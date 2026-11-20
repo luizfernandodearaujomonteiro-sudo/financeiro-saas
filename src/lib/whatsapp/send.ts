@@ -12,7 +12,7 @@ export interface OutboundTarget {
 
 /**
  * Envia mensagens EM ORDEM (uma chamada por mensagem) e registra cada uma em
- * fam_whatsapp_messages. Alertas com código usam uma mensagem só para o código.
+ * fin_financeiro_whatsapp_messages. Alertas com código usam uma mensagem só para o código.
  */
 export async function sendMessages(target: OutboundTarget, messages: string[], provider?: WhatsAppProvider): Promise<SendResult[]> {
   let p: WhatsAppProvider | null = provider ?? null;
@@ -40,7 +40,7 @@ export async function sendMessages(target: OutboundTarget, messages: string[], p
     results.push(r);
     await withService((db) =>
       db.query(
-        "insert into public.fam_whatsapp_messages (household_id, user_id, direction, phone_e164, body, provider, status, error) values ($1,$2,'out',$3,$4,$5,$6,$7)",
+        "insert into public.fin_financeiro_whatsapp_messages (household_id, user_id, direction, phone_e164, body, provider, status, error) values ($1,$2,'out',$3,$4,$5,$6,$7)",
         [target.householdId, target.userId, target.phone, body.slice(0, 4096), p?.name ?? env.whatsappProvider, r.ok ? "ok" : "erro", r.ok ? null : r.error ?? null],
       ),
     );

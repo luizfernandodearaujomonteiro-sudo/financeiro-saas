@@ -1,6 +1,6 @@
 /**
  * Pertencimento à família. auth.users é compartilhado com outros apps:
- * estar logado NÃO basta — é preciso existir uma linha em fam_household_members.
+ * estar logado NÃO basta — é preciso existir uma linha em fin_financeiro_household_members.
  */
 import "server-only";
 import { redirect } from "next/navigation";
@@ -25,9 +25,9 @@ export async function loadMembership(userId: string): Promise<Member | null> {
     db.one<Member>(
       `select m.user_id as "userId", m.household_id as "householdId", h.name as "householdName",
               m.role, p.display_name as "displayName"
-         from public.fam_household_members m
-         join public.fam_households h on h.id = m.household_id
-         join public.fam_profiles p on p.id = m.user_id
+         from public.fin_financeiro_household_members m
+         join public.fin_financeiro_households h on h.id = m.household_id
+         join public.fin_financeiro_profiles p on p.id = m.user_id
         where m.user_id = auth.uid()`,
     ),
   );

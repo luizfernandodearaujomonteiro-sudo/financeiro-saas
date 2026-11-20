@@ -39,7 +39,7 @@ export default async function SimuladorPage() {
   const ctx = { userId: member.userId, householdId: member.householdId };
   const [messages, phone] = await Promise.all([
     listConversation(ctx, 80),
-    withUser(member.userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fam_whatsapp_numbers where user_id = auth.uid()")),
+    withUser(member.userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fin_financeiro_whatsapp_numbers where user_id = auth.uid()")),
   ]);
   const ordered = [...messages].reverse();
 

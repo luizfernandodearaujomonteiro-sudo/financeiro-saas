@@ -11,20 +11,20 @@ import type { MemberCtx } from "./types";
 
 export async function savePdfPassword(ctx: MemberCtx, plain: string) {
   const pw = z.string().min(1, "Informe a senha").max(64).parse(plain);
-  await withUser(ctx.userId, (db) => db.query("select public.fam_set_pdf_password($1)", [encryptSecret(pw)]));
+  await withUser(ctx.userId, (db) => db.query("select public.fin_financeiro_set_pdf_password($1)", [encryptSecret(pw)]));
 }
 
 export async function clearPdfPassword(ctx: MemberCtx) {
-  await withUser(ctx.userId, (db) => db.query("select public.fam_set_pdf_password(null)"));
+  await withUser(ctx.userId, (db) => db.query("select public.fin_financeiro_set_pdf_password(null)"));
 }
 
 export async function hasPdfPassword(ctx: MemberCtx): Promise<boolean> {
-  return withUser(ctx.userId, async (db) => (await db.one<{ ok: boolean }>("select public.fam_has_pdf_password() as ok"))?.ok ?? false);
+  return withUser(ctx.userId, async (db) => (await db.one<{ ok: boolean }>("select public.fin_financeiro_has_pdf_password() as ok"))?.ok ?? false);
 }
 
 /** Somente jobs (service_role): senha em claro, usada só em memória. */
 export async function pdfPasswordForJob(userId: string): Promise<string | null> {
-  const row = await withService((db) => db.one<{ password_enc: string }>("select password_enc from public.fam_pdf_passwords where user_id = $1", [userId]));
+  const row = await withService((db) => db.one<{ password_enc: string }>("select password_enc from public.fin_financeiro_pdf_passwords where user_id = $1", [userId]));
   if (!row) return null;
   try {
     return decryptSecret(row.password_enc);

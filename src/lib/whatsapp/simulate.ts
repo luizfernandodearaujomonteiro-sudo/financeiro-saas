@@ -30,7 +30,7 @@ export async function simulateInbound(ctx: MemberCtx, text: string) {
   if (!env.simulatorEnabled) throw new Error("Simulador desativado (use LOCAL_DEV_AUTH=true ou WHATSAPP_PROVIDER=simulator)");
   const secret = env.secret("WHATSAPP_WEBHOOK_SECRET");
   if (!secret) throw new Error("Defina WHATSAPP_WEBHOOK_SECRET (mínimo 24 caracteres) para simular o webhook");
-  const phone = await withUser(ctx.userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fam_whatsapp_numbers where user_id = auth.uid()"));
+  const phone = await withUser(ctx.userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fin_financeiro_whatsapp_numbers where user_id = auth.uid()"));
   if (!phone) throw new Error("Cadastre seu telefone em Configurações › WhatsApp antes de simular");
   const req = new Request(`${env.appUrl}/api/whatsapp/webhook`, {
     method: "POST",
@@ -44,7 +44,7 @@ export async function simulateInbound(ctx: MemberCtx, text: string) {
 export function listConversation(ctx: MemberCtx, limit = 60) {
   return withUser(ctx.userId, (db) =>
     db.query<{ id: number; direction: "in" | "out"; body: string; provider: string; status: string; created_at: string }>(
-      "select id, direction, body, provider, status, created_at from public.fam_whatsapp_messages where user_id = auth.uid() order by id desc limit $1",
+      "select id, direction, body, provider, status, created_at from public.fin_financeiro_whatsapp_messages where user_id = auth.uid() order by id desc limit $1",
       [limit],
     ),
   );

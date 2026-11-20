@@ -51,7 +51,7 @@ export async function handleWebhookRequest(req: Request): Promise<Response> {
 async function allowedInstances(): Promise<string[]> {
   const fromEnv = process.env.EVOLUTION_INSTANCE_NAME || "financeiro";
   const rows = await withService((db) =>
-    db.query<{ i: string }>("select distinct evolution_instance as i from public.fam_whatsapp_config where evolution_instance is not null"),
+    db.query<{ i: string }>("select distinct evolution_instance as i from public.fin_financeiro_whatsapp_config where evolution_instance is not null"),
   );
   return [...new Set([fromEnv, ...rows.map((r) => r.i)])];
 }

@@ -109,21 +109,21 @@ export async function saveWhatsappConfigAction(_p: ActionState, fd: FormData): P
     const metaEnc = v.metaAccessToken ? encryptSecret(v.metaAccessToken) : null;
     await withUser(ctx.userId, async (db) => {
       await db.query(
-        `insert into public.fam_whatsapp_config (household_id, provider, display_number, evolution_base_url, evolution_instance, meta_phone_number_id, updated_by)
+        `insert into public.fin_financeiro_whatsapp_config (household_id, provider, display_number, evolution_base_url, evolution_instance, meta_phone_number_id, updated_by)
          values ($1, $2, $3, $4, $5, $6, auth.uid())
          on conflict (household_id) do update set provider = excluded.provider, display_number = excluded.display_number,
            evolution_base_url = excluded.evolution_base_url, evolution_instance = excluded.evolution_instance,
            meta_phone_number_id = excluded.meta_phone_number_id, updated_by = auth.uid(), updated_at = now()`,
         [ctx.householdId, v.provider, v.displayNumber ?? null, v.evolutionBaseUrl.replace(/\/$/, ""), v.evolutionInstance, v.metaPhoneNumberId ?? null],
       );
-      if (evoEnc || metaEnc) await db.query("select public.fam_set_whatsapp_secrets($1, $2)", [evoEnc, metaEnc]);
+      if (evoEnc || metaEnc) await db.query("select public.fin_financeiro_set_whatsapp_secrets($1, $2)", [evoEnc, metaEnc]);
     });
     return evoEnc || metaEnc ? "Configuração salva (token armazenado cifrado)." : "Configuração salva.";
   }, [PATH]);
 }
 
 async function myPhone(userId: string) {
-  return withUser(userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fam_whatsapp_numbers where user_id = auth.uid()"));
+  return withUser(userId, (db) => db.one<{ phone_e164: string }>("select phone_e164 from public.fin_financeiro_whatsapp_numbers where user_id = auth.uid()"));
 }
 
 export async function testWhatsappAction(): Promise<ActionState> {
@@ -183,7 +183,7 @@ export async function connectQrAction(): Promise<ActionState> {
 export async function disconnectGmailAction(): Promise<ActionState> {
   const { ctx } = await load();
   return run(async () => {
-    await withUser(ctx.userId, (db) => db.query("select public.fam_disconnect_gmail()"));
+    await withUser(ctx.userId, (db) => db.query("select public.fin_financeiro_disconnect_gmail()"));
     return "Gmail desconectado.";
   }, [PATH]);
 }

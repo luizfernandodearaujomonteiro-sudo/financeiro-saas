@@ -1,5 +1,5 @@
 /**
- * Testes REAIS de RLS contra o Postgres local com as migrations fam_.
+ * Testes REAIS de RLS contra o Postgres local com as migrations fin_financeiro_.
  * Cada consulta roda como `authenticated` com o claim `sub` do usuário.
  */
 import pg from "pg";
@@ -9,7 +9,7 @@ import { asUser, freshTestDb } from "../support/db";
 
 const { luiz, esposa, outro } = SEED_USERS;
 let pool: pg.Pool; // superusuário: catálogo e preparação de dados
-let app: pg.Pool; // fam_app (NOINHERIT): todas as consultas "como usuário"
+let app: pg.Pool; // fin_financeiro_app (NOINHERIT): todas as consultas "como usuário"
 let householdId: string;
 let itau: string;
 let nubank: string;
@@ -30,116 +30,116 @@ afterAll(async () => {
 const count = async (userId: string | null, sql: string, params: unknown[] = []) =>
   asUser(app, userId, async (c) => Number((await c.query(`select count(*)::int as n from (${sql}) x`, params)).rows[0].n));
 
-describe("papel de conexão do app (fam_app NOINHERIT)", () => {
-  it("conectado como fam_app, sem SET ROLE, não lê nenhuma tabela fam_ nem auth.users", async () => {
+describe("papel de conexão do app (fin_financeiro_app NOINHERIT)", () => {
+  it("conectado como fin_financeiro_app, sem SET ROLE, não lê nenhuma tabela fin_financeiro_ nem auth.users", async () => {
     const c = await app.connect();
     try {
-      expect((await c.query("select current_user as u")).rows[0].u).toBe("fam_app");
-      await expect(c.query("select * from fam_entries limit 1")).rejects.toThrow(/permission denied/);
-      await expect(c.query("select * from fam_households limit 1")).rejects.toThrow(/permission denied/);
+      expect((await c.query("select current_user as u")).rows[0].u).toBe("fin_financeiro_app");
+      await expect(c.query("select * from fin_financeiro_entries limit 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("select * from fin_financeiro_households limit 1")).rejects.toThrow(/permission denied/);
       await expect(c.query("select * from auth.users limit 1")).rejects.toThrow(/permission denied/);
-      await expect(c.query("select fam_private.fam_login_failures($1, 60)", ["a".repeat(64)])).rejects.toThrow(/permission denied/);
+      await expect(c.query("select fin_financeiro_private.fin_financeiro_login_failures($1, 60)", ["a".repeat(64)])).rejects.toThrow(/permission denied/);
     } finally {
       c.release();
     }
   });
-  it("fam_app não executa DDL nem como service_role; service_role só faz DML", async () => {
+  it("fin_financeiro_app não executa DDL nem como service_role; service_role só faz DML", async () => {
     const c = await app.connect();
     try {
-      await expect(c.query("create table public.fam_hack (id int)")).rejects.toThrow(/permission denied/);
+      await expect(c.query("create table public.fin_financeiro_hack (id int)")).rejects.toThrow(/permission denied/);
       await c.query("begin");
       await c.query("set local role service_role");
-      expect((await c.query("select count(*)::int n from fam_entries")).rows[0].n).toBeGreaterThan(0); // ignora RLS (jobs)
-      await expect(c.query("create table public.fam_hack (id int)")).rejects.toThrow(/permission denied/);
+      expect((await c.query("select count(*)::int n from fin_financeiro_entries")).rows[0].n).toBeGreaterThan(0); // ignora RLS (jobs)
+      await expect(c.query("create table public.fin_financeiro_hack (id int)")).rejects.toThrow(/permission denied/);
       await c.query("rollback");
       await c.query("begin");
       await c.query("set local role service_role");
-      await expect(c.query("alter table public.fam_entries add column x int")).rejects.toThrow(/must be owner|permission denied/);
+      await expect(c.query("alter table public.fin_financeiro_entries add column x int")).rejects.toThrow(/must be owner|permission denied/);
       await c.query("rollback");
     } finally {
       c.release();
     }
   });
-  it("fam_app não é superusuário, não cria papéis nem bancos", async () => {
-    const r = await pool.query("select rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname = 'fam_app'");
+  it("fin_financeiro_app não é superusuário, não cria papéis nem bancos", async () => {
+    const r = await pool.query("select rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname = 'fin_financeiro_app'");
     expect(r.rows[0]).toEqual({ rolsuper: false, rolinherit: false, rolcreaterole: false, rolcreatedb: false, rolbypassrls: false });
   });
 });
 
 describe("RPCs de login e convite fora do schema exposto", () => {
-  it("fam_login_failures, fam_record_login_attempt e fam_invite_info ficam só em fam_private", async () => {
+  it("fin_financeiro_login_failures, fin_financeiro_record_login_attempt e fin_financeiro_invite_info ficam só em fin_financeiro_private", async () => {
     const r = await pool.query(`select n.nspname, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-      where p.proname in ('fam_login_failures','fam_record_login_attempt','fam_invite_info') order by 2`);
-    expect(r.rows.every((x) => x.nspname === "fam_private")).toBe(true);
+      where p.proname in ('fin_financeiro_login_failures','fin_financeiro_record_login_attempt','fin_financeiro_invite_info') order by 2`);
+    expect(r.rows.every((x) => x.nspname === "fin_financeiro_private")).toBe(true);
     expect(r.rows).toHaveLength(3);
-    const pub = await pool.query("select has_schema_privilege('public', 'fam_private', 'USAGE') as ok");
+    const pub = await pool.query("select has_schema_privilege('public', 'fin_financeiro_private', 'USAGE') as ok");
     expect(pub.rows[0].ok).toBe(false);
   });
 });
 
 describe("cobertura de RLS", () => {
-  it("TODAS as tabelas fam_ têm RLS habilitado e nenhum privilégio para anon", async () => {
+  it("TODAS as tabelas fin_financeiro_ têm RLS habilitado e nenhum privilégio para anon", async () => {
     const r = await pool.query(`select c.relname, c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'fam\\_%'`);
+      where n.nspname = 'public' and c.relkind = 'r' and c.relname like 'fin\\_financeiro\\_%'`);
     expect(r.rows.length).toBeGreaterThanOrEqual(29);
     expect(r.rows.filter((x) => !x.relrowsecurity).map((x) => x.relname)).toEqual([]);
-    const grants = await pool.query(`select table_name, privilege_type from information_schema.role_table_grants where grantee = 'anon' and table_name like 'fam\\_%'`);
+    const grants = await pool.query(`select table_name, privilege_type from information_schema.role_table_grants where grantee = 'anon' and table_name like 'fin\\_financeiro\\_%'`);
     expect(grants.rows).toEqual([]);
   });
-  it("as migrations não criam objetos fora do prefixo fam_ no schema public", async () => {
+  it("as migrations não criam objetos fora do prefixo fin_financeiro_ no schema public", async () => {
     const t = await pool.query(`select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
-      where n.nspname = 'public' and c.relkind in ('r','v','m','S') and c.relname not like 'fam\\_%' and c.relname not like 'invest\\_%'`);
-    expect(t.rows.map((r) => r.relname).filter((n) => !n.startsWith("fam_"))).toEqual([]);
-    const f = await pool.query(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname not like 'fam\\_%'`);
+      where n.nspname = 'public' and c.relkind in ('r','v','m','S') and c.relname not like 'fin\\_financeiro\\_%' and c.relname not like 'invest\\_%'`);
+    expect(t.rows.map((r) => r.relname).filter((n) => !n.startsWith("fin_financeiro_"))).toEqual([]);
+    const f = await pool.query(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname not like 'fin\\_financeiro\\_%'`);
     expect(f.rows).toEqual([]);
   });
 });
 
 describe("lançamentos: pessoal x compartilhado", () => {
   it("Luiz vê os compartilhados e os próprios pessoais, mas NÃO os pessoais da esposa", async () => {
-    expect(await count(luiz.id, "select 1 from fam_entries where owner_id = $1 and visibility = 'pessoal'", [esposa.id])).toBe(0);
-    expect(await count(luiz.id, "select 1 from fam_entries where owner_id = $1 and visibility = 'compartilhado'", [esposa.id])).toBeGreaterThan(0);
-    expect(await count(luiz.id, "select 1 from fam_entries where owner_id = $1 and visibility = 'pessoal'", [luiz.id])).toBeGreaterThan(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_entries where owner_id = $1 and visibility = 'pessoal'", [esposa.id])).toBe(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_entries where owner_id = $1 and visibility = 'compartilhado'", [esposa.id])).toBeGreaterThan(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_entries where owner_id = $1 and visibility = 'pessoal'", [luiz.id])).toBeGreaterThan(0);
   });
   it("A esposa vê os compartilhados e os próprios pessoais, mas NÃO os pessoais do Luiz", async () => {
-    expect(await count(esposa.id, "select 1 from fam_entries where owner_id = $1 and visibility = 'pessoal'", [luiz.id])).toBe(0);
-    expect(await count(esposa.id, "select 1 from fam_entries where owner_id = $1 and visibility = 'compartilhado'", [luiz.id])).toBeGreaterThan(0);
-    const total = await pool.query("select count(*)::int n from fam_entries");
-    const visible = await count(esposa.id, "select 1 from fam_entries");
+    expect(await count(esposa.id, "select 1 from fin_financeiro_entries where owner_id = $1 and visibility = 'pessoal'", [luiz.id])).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_entries where owner_id = $1 and visibility = 'compartilhado'", [luiz.id])).toBeGreaterThan(0);
+    const total = await pool.query("select count(*)::int n from fin_financeiro_entries");
+    const visible = await count(esposa.id, "select 1 from fin_financeiro_entries");
     expect(visible).toBeLessThan(total.rows[0].n);
   });
   it("um membro não altera nem apaga lançamento compartilhado do outro", async () => {
-    const upd = await asUser(app, esposa.id, (c) => c.query("update fam_entries set amount_cents = 1 where owner_id = $1 and visibility = 'compartilhado'", [luiz.id]));
+    const upd = await asUser(app, esposa.id, (c) => c.query("update fin_financeiro_entries set amount_cents = 1 where owner_id = $1 and visibility = 'compartilhado'", [luiz.id]));
     expect(upd.rowCount).toBe(0);
-    const del = await asUser(app, esposa.id, (c) => c.query("delete from fam_entries where owner_id = $1", [luiz.id]));
+    const del = await asUser(app, esposa.id, (c) => c.query("delete from fin_financeiro_entries where owner_id = $1", [luiz.id]));
     expect(del.rowCount).toBe(0);
   });
   it("não é possível inserir lançamento em nome de outra pessoa", async () => {
     await expect(asUser(app, esposa.id, (c) => c.query(
-      "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
+      "insert into fin_financeiro_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
       [householdId, luiz.id]))).rejects.toThrow(/row-level security/);
   });
   it("não é possível tornar pessoal (ou alterar) o lançamento de outra pessoa trocando o dono", async () => {
-    const r = await asUser(app, esposa.id, (c) => c.query("update fam_entries set owner_id = $1 where owner_id = $1", [esposa.id]));
+    const r = await asUser(app, esposa.id, (c) => c.query("update fin_financeiro_entries set owner_id = $1 where owner_id = $1", [esposa.id]));
     expect(r.rowCount).toBeGreaterThan(0); // os próprios: ok
-    await expect(asUser(app, esposa.id, (c) => c.query("update fam_entries set owner_id = $2 where owner_id = $1", [esposa.id, luiz.id]))).rejects.toThrow(/row-level security/);
+    await expect(asUser(app, esposa.id, (c) => c.query("update fin_financeiro_entries set owner_id = $2 where owner_id = $1", [esposa.id, luiz.id]))).rejects.toThrow(/row-level security/);
   });
 });
 
 describe("usuário do auth.users compartilhado que NÃO é membro", () => {
-  const tables = ["fam_households", "fam_profiles", "fam_household_members", "fam_categories", "fam_entries", "fam_cards", "fam_invoices", "fam_bills",
-    "fam_goals", "fam_goal_contributions", "fam_bank_accounts", "fam_review_queue", "fam_whatsapp_numbers", "fam_whatsapp_config", "fam_networth_snapshots", "fam_card_purchases"];
+  const tables = ["fin_financeiro_households", "fin_financeiro_profiles", "fin_financeiro_household_members", "fin_financeiro_categories", "fin_financeiro_entries", "fin_financeiro_cards", "fin_financeiro_invoices", "fin_financeiro_bills",
+    "fin_financeiro_goals", "fin_financeiro_goal_contributions", "fin_financeiro_bank_accounts", "fin_financeiro_review_queue", "fin_financeiro_whatsapp_numbers", "fin_financeiro_whatsapp_config", "fin_financeiro_networth_snapshots", "fin_financeiro_card_purchases"];
   it.each(tables)("não vê nada em %s", async (t) => {
     expect(await count(outro.id, `select 1 from ${t}`)).toBe(0);
   });
   it("não consegue inserir dados na família de outra pessoa", async () => {
     await expect(asUser(app, outro.id, (c) => c.query(
-      "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
+      "insert into fin_financeiro_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
       [householdId, outro.id]))).rejects.toThrow();
-    await expect(asUser(app, outro.id, (c) => c.query("insert into fam_categories (household_id, name, kind) values ($1, 'Hack', 'despesa')", [householdId]))).rejects.toThrow(/row-level security/);
+    await expect(asUser(app, outro.id, (c) => c.query("insert into fin_financeiro_categories (household_id, name, kind) values ($1, 'Hack', 'despesa')", [householdId]))).rejects.toThrow(/row-level security/);
   });
   it("RPCs de investimentos não devolvem nada", async () => {
-    expect(await count(outro.id, "select * from fam_invest_positions()")).toBe(0);
+    expect(await count(outro.id, "select * from fin_financeiro_invest_positions()")).toBe(0);
   });
 });
 
@@ -151,17 +151,17 @@ describe("cadastro (signup) não concede nada", () => {
   it("não existe trigger em auth.users criando família/membro/perfil", async () => {
     const trg = await pool.query("select tgname from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'auth' and c.relname = 'users' and not t.tgisinternal");
     expect(trg.rows).toEqual([]);
-    expect((await pool.query("select count(*)::int n from fam_profiles where id = $1", [novo])).rows[0].n).toBe(0);
-    expect((await pool.query("select count(*)::int n from fam_household_members where user_id = $1", [novo])).rows[0].n).toBe(0);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_profiles where id = $1", [novo])).rows[0].n).toBe(0);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_household_members where user_id = $1", [novo])).rows[0].n).toBe(0);
   });
   it("o usuário novo não consegue se colocar em uma família nem criar família", async () => {
-    await expect(asUser(app, novo, (c) => c.query("insert into fam_household_members (household_id, user_id, role) values ($1, $2, 'owner')", [householdId, novo]))).rejects.toThrow(/permission denied/);
-    await expect(asUser(app, novo, (c) => c.query("insert into fam_households (name) values ('minha')"))).rejects.toThrow(/permission denied/);
-    await expect(asUser(app, novo, (c) => c.query("insert into fam_profiles (id, display_name) values ($1, 'x')", [novo]))).rejects.toThrow(/permission denied/);
-    await expect(asUser(app, novo, (c) => c.query("select fam_bootstrap_household($1, 'x', 'y')", [novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fin_financeiro_household_members (household_id, user_id, role) values ($1, $2, 'owner')", [householdId, novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fin_financeiro_households (name) values ('minha')"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fin_financeiro_profiles (id, display_name) values ($1, 'x')", [novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("select fin_financeiro_bootstrap_household($1, 'x', 'y')", [novo]))).rejects.toThrow(/permission denied/);
   });
   it("convite inválido não dá acesso", async () => {
-    await expect(asUser(app, novo, (c) => c.query("select fam_accept_invite('token-falso', 'Novo')"))).rejects.toThrow(/convite inválido/);
+    await expect(asUser(app, novo, (c) => c.query("select fin_financeiro_accept_invite('token-falso', 'Novo')"))).rejects.toThrow(/convite inválido/);
   });
 });
 
@@ -170,116 +170,116 @@ describe("convites (fluxo explícito)", () => {
   let token = "";
   beforeAll(async () => {
     await pool.query("insert into auth.users (id, email) values ($1,'dono2@x.local'), ($2,'conv@x.local'), ($3,'terc@x.local') on conflict do nothing", [dono2, convidado, terceiro]);
-    await pool.query("select fam_bootstrap_household($1, 'Outra família', 'Dono 2')", [dono2]);
+    await pool.query("select fin_financeiro_bootstrap_household($1, 'Outra família', 'Dono 2')", [dono2]);
   });
   it("só o dono cria convite; família com 2 membros não aceita mais convites", async () => {
-    await expect(asUser(app, esposa.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/apenas o dono/);
-    await expect(asUser(app, luiz.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/2 membros/);
-    token = (await asUser(app, dono2, (c) => c.query("select fam_create_invite() as t"))).rows[0].t;
+    await expect(asUser(app, esposa.id, (c) => c.query("select fin_financeiro_create_invite()"))).rejects.toThrow(/apenas o dono/);
+    await expect(asUser(app, luiz.id, (c) => c.query("select fin_financeiro_create_invite()"))).rejects.toThrow(/2 membros/);
+    token = (await asUser(app, dono2, (c) => c.query("select fin_financeiro_create_invite() as t"))).rows[0].t;
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     // o banco guarda só o hash
-    expect((await pool.query("select count(*)::int n from fam_household_invites where token_hash = $1", [token])).rows[0].n).toBe(0);
+    expect((await pool.query("select count(*)::int n from fin_financeiro_household_invites where token_hash = $1", [token])).rows[0].n).toBe(0);
   });
   it("aceitar convite cria membro 'member'; não dá para reutilizar", async () => {
-    expect((await asUser(app, null, (c) => c.query("select fam_private.fam_invite_info($1) as n", [token]), "anon")).rows[0].n).toBe("Outra família");
-    await asUser(app, convidado, (c) => c.query("select fam_accept_invite($1, 'Convidada')", [token]));
-    const role = await asUser(app, convidado, (c) => c.query("select role from fam_household_members where user_id = auth.uid()"));
+    expect((await asUser(app, null, (c) => c.query("select fin_financeiro_private.fin_financeiro_invite_info($1) as n", [token]), "anon")).rows[0].n).toBe("Outra família");
+    await asUser(app, convidado, (c) => c.query("select fin_financeiro_accept_invite($1, 'Convidada')", [token]));
+    const role = await asUser(app, convidado, (c) => c.query("select role from fin_financeiro_household_members where user_id = auth.uid()"));
     expect(role.rows[0].role).toBe("member");
-    await expect(asUser(app, terceiro, (c) => c.query("select fam_accept_invite($1, 'X')", [token]))).rejects.toThrow(/convite inválido/);
+    await expect(asUser(app, terceiro, (c) => c.query("select fin_financeiro_accept_invite($1, 'X')", [token]))).rejects.toThrow(/convite inválido/);
     // a nova família não enxerga a família do Luiz
-    expect(await count(convidado, "select 1 from fam_entries where household_id = $1", [householdId])).toBe(0);
+    expect(await count(convidado, "select 1 from fin_financeiro_entries where household_id = $1", [householdId])).toBe(0);
   });
   it("membro não altera o próprio papel", async () => {
-    await expect(asUser(app, convidado, (c) => c.query("update fam_household_members set role = 'owner' where user_id = auth.uid()"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, convidado, (c) => c.query("update fin_financeiro_household_members set role = 'owner' where user_id = auth.uid()"))).rejects.toThrow(/permission denied/);
   });
 });
 
 describe("cartões, faturas e contas", () => {
   it("cartão pessoal da esposa e suas faturas são invisíveis para o Luiz", async () => {
-    expect(await count(luiz.id, "select 1 from fam_cards where id = $1", [itau])).toBe(0);
-    expect(await count(luiz.id, "select 1 from fam_invoices where card_id = $1", [itau])).toBe(0);
-    expect(await count(esposa.id, "select 1 from fam_invoices where card_id = $1", [itau])).toBeGreaterThan(0);
-    expect(await count(esposa.id, "select 1 from fam_invoices where card_id = $1", [nubank])).toBeGreaterThan(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_cards where id = $1", [itau])).toBe(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_invoices where card_id = $1", [itau])).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_invoices where card_id = $1", [itau])).toBeGreaterThan(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_invoices where card_id = $1", [nubank])).toBeGreaterThan(0);
   });
   it("Luiz não lança compra no cartão pessoal da esposa (trigger)", async () => {
     await expect(asUser(app, luiz.id, (c) => c.query(
-      "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month, payment_method, card_id) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01','cartao_credito',$3)",
+      "insert into fin_financeiro_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month, payment_method, card_id) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01','cartao_credito',$3)",
       [householdId, luiz.id, itau]))).rejects.toThrow(/cartão não disponível/);
   });
   it("total da fatura não pode ser alterado pelo usuário (só pelo trigger)", async () => {
-    await expect(asUser(app, luiz.id, (c) => c.query("update fam_invoices set total_cents = 0 where card_id = $1", [nubank]))).rejects.toThrow(/permission denied/);
-    const ok = await asUser(app, luiz.id, (c) => c.query("update fam_invoices set status = 'paga' where card_id = $1 and status = 'aberta' returning id", [nubank]));
+    await expect(asUser(app, luiz.id, (c) => c.query("update fin_financeiro_invoices set total_cents = 0 where card_id = $1", [nubank]))).rejects.toThrow(/permission denied/);
+    const ok = await asUser(app, luiz.id, (c) => c.query("update fin_financeiro_invoices set status = 'paga' where card_id = $1 and status = 'aberta' returning id", [nubank]));
     expect(ok.rowCount).toBeGreaterThanOrEqual(0);
   });
   it("trigger mantém o total da fatura igual à soma das parcelas", async () => {
     const r = await pool.query(`select i.id, i.total_cents, coalesce(sum(case when e.kind='despesa' then e.amount_cents else -e.amount_cents end),0)::bigint s
-      from fam_invoices i left join fam_entries e on e.invoice_id = i.id group by i.id`);
+      from fin_financeiro_invoices i left join fin_financeiro_entries e on e.invoice_id = i.id group by i.id`);
     for (const row of r.rows) expect(Number(row.total_cents)).toBe(Number(row.s));
   });
   it("conta pessoal (Academia) da esposa não aparece para o Luiz; compartilhadas sim", async () => {
-    expect(await count(luiz.id, "select 1 from fam_bills where description = 'Academia'")).toBe(0);
-    expect(await count(esposa.id, "select 1 from fam_bills where description = 'Academia'")).toBe(1);
-    expect(await count(luiz.id, "select 1 from fam_bills where visibility = 'compartilhado'")).toBeGreaterThanOrEqual(4);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_bills where description = 'Academia'")).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_bills where description = 'Academia'")).toBe(1);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_bills where visibility = 'compartilhado'")).toBeGreaterThanOrEqual(4);
   });
   it("fila de revisão é só do dono", async () => {
-    expect(await count(luiz.id, "select 1 from fam_review_queue")).toBeGreaterThan(0);
-    expect(await count(esposa.id, "select 1 from fam_review_queue")).toBe(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_review_queue")).toBeGreaterThan(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_review_queue")).toBe(0);
   });
 });
 
 describe("segredos e tabelas internas", () => {
-  it.each(["fam_oauth_tokens", "fam_whatsapp_secrets", "fam_login_attempts", "fam_whatsapp_inbound", "fam_notification_log", "fam_pdf_passwords"])("%s é inacessível para usuários", async (t) => {
+  it.each(["fin_financeiro_oauth_tokens", "fin_financeiro_whatsapp_secrets", "fin_financeiro_login_attempts", "fin_financeiro_whatsapp_inbound", "fin_financeiro_notification_log", "fin_financeiro_pdf_passwords"])("%s é inacessível para usuários", async (t) => {
     await expect(asUser(app, luiz.id, (c) => c.query(`select * from ${t}`))).rejects.toThrow(/permission denied/);
   });
   it("só o dono lê os segredos cifrados do WhatsApp via RPC", async () => {
-    await expect(asUser(app, esposa.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"))).rejects.toThrow(/apenas o dono/);
-    await asUser(app, luiz.id, (c) => c.query("select fam_set_whatsapp_secrets('v1.cifrado', null)"));
-    const r = await asUser(app, luiz.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"));
+    await expect(asUser(app, esposa.id, (c) => c.query("select * from fin_financeiro_get_whatsapp_secrets()"))).rejects.toThrow(/apenas o dono/);
+    await asUser(app, luiz.id, (c) => c.query("select fin_financeiro_set_whatsapp_secrets('v1.cifrado', null)"));
+    const r = await asUser(app, luiz.id, (c) => c.query("select * from fin_financeiro_get_whatsapp_secrets()"));
     expect(r.rows[0].evolution_token_enc).toBe("v1.cifrado");
   });
   it("membro define o próprio telefone; só o dono define o de outro", async () => {
-    await expect(asUser(app, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511911112222')", [luiz.id]))).rejects.toThrow(/apenas o dono/);
-    await asUser(app, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511990000002')", [esposa.id]));
+    await expect(asUser(app, esposa.id, (c) => c.query("select fin_financeiro_set_member_phone($1, '+5511911112222')", [luiz.id]))).rejects.toThrow(/apenas o dono/);
+    await asUser(app, esposa.id, (c) => c.query("select fin_financeiro_set_member_phone($1, '+5511990000002')", [esposa.id]));
   });
   it("limite de login: anon só acessa via RPC", async () => {
     const key = "a".repeat(64);
-    await asUser(app, null, (c) => c.query("select fam_private.fam_record_login_attempt($1, false)", [key]), "anon");
-    const n = await asUser(app, null, (c) => c.query("select fam_private.fam_login_failures($1, 900) as n", [key]), "anon");
+    await asUser(app, null, (c) => c.query("select fin_financeiro_private.fin_financeiro_record_login_attempt($1, false)", [key]), "anon");
+    const n = await asUser(app, null, (c) => c.query("select fin_financeiro_private.fin_financeiro_login_failures($1, 900) as n", [key]), "anon");
     expect(n.rows[0].n).toBe(1);
-    await expect(asUser(app, null, (c) => c.query("select * from fam_login_attempts"), "anon")).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, null, (c) => c.query("select * from fin_financeiro_login_attempts"), "anon")).rejects.toThrow(/permission denied/);
   });
 });
 
 describe("investimentos (ponte somente leitura para invest_*)", () => {
   it("esposa vê posições COMPARTILHADAS do Luiz pela RPC, mas não lê invest_holdings diretamente", async () => {
-    expect(await count(esposa.id, "select * from fam_invest_positions()")).toBe(4);
+    expect(await count(esposa.id, "select * from fin_financeiro_invest_positions()")).toBe(4);
     expect(await count(esposa.id, "select 1 from invest_holdings")).toBe(0);
   });
   it("quando o Luiz deixa pessoal, a esposa deixa de ver", async () => {
-    await asUser(app, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'pessoal' where user_id = auth.uid()"));
-    expect(await count(esposa.id, "select * from fam_invest_positions()")).toBe(0);
-    expect(await count(luiz.id, "select * from fam_invest_positions()")).toBe(4);
-    await asUser(app, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'compartilhado' where user_id = auth.uid()"));
+    await asUser(app, luiz.id, (c) => c.query("update fin_financeiro_invest_links set visibility = 'pessoal' where user_id = auth.uid()"));
+    expect(await count(esposa.id, "select * from fin_financeiro_invest_positions()")).toBe(0);
+    expect(await count(luiz.id, "select * from fin_financeiro_invest_positions()")).toBe(4);
+    await asUser(app, luiz.id, (c) => c.query("update fin_financeiro_invest_links set visibility = 'compartilhado' where user_id = auth.uid()"));
   });
   it("vincular perfil de investimentos só funciona para o próprio login", async () => {
-    const r = await asUser(app, esposa.id, (c) => c.query("select fam_link_invest_profile('pessoal') as ok"));
+    const r = await asUser(app, esposa.id, (c) => c.query("select fin_financeiro_link_invest_profile('pessoal') as ok"));
     expect(r.rows[0].ok).toBe(false); // esposa não tem invest_profile
   });
 });
 
 describe("dados por perfil", () => {
   it("histórico de busca, preferências e mensagens são só do próprio perfil", async () => {
-    expect(await count(esposa.id, "select 1 from fam_search_history")).toBe(0);
-    expect(await count(luiz.id, "select 1 from fam_search_history")).toBe(2);
-    expect(await count(esposa.id, "select 1 from fam_profile_prefs where user_id = $1", [luiz.id])).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_search_history")).toBe(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_search_history")).toBe(2);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_profile_prefs where user_id = $1", [luiz.id])).toBe(0);
   });
   it("snapshot de patrimônio pessoal do Luiz não aparece para a esposa", async () => {
-    expect(await count(esposa.id, "select 1 from fam_networth_snapshots where user_id = $1", [luiz.id])).toBe(0);
-    expect(await count(esposa.id, "select 1 from fam_networth_snapshots where user_id is null")).toBeGreaterThan(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_networth_snapshots where user_id = $1", [luiz.id])).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_networth_snapshots where user_id is null")).toBeGreaterThan(0);
   });
   it("aportes de meta pessoal da esposa são invisíveis para o Luiz", async () => {
-    expect(await count(luiz.id, "select 1 from fam_goals where name = 'Viagem de férias'")).toBe(0);
-    expect(await count(luiz.id, "select 1 from fam_goal_contributions c join fam_goals g on g.id = c.goal_id where g.name = 'Viagem de férias'")).toBe(0);
-    expect(await count(esposa.id, "select 1 from fam_goal_contributions")).toBeGreaterThan(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_goals where name = 'Viagem de férias'")).toBe(0);
+    expect(await count(luiz.id, "select 1 from fin_financeiro_goal_contributions c join fin_financeiro_goals g on g.id = c.goal_id where g.name = 'Viagem de férias'")).toBe(0);
+    expect(await count(esposa.id, "select 1 from fin_financeiro_goal_contributions")).toBeGreaterThan(0);
   });
 });

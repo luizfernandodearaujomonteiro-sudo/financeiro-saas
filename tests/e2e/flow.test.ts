@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 async function outbox(userId: string) {
-  return withService((db) => db.query<{ body: string; direction: string }>("select body, direction from fam_whatsapp_messages where user_id = $1 and status = 'ok' order by id", [userId]));
+  return withService((db) => db.query<{ body: string; direction: string }>("select body, direction from fin_financeiro_whatsapp_messages where user_id = $1 and status = 'ok' order by id", [userId]));
 }
 
 function waRequest(body: unknown, secret: string | null = process.env.WHATSAPP_WEBHOOK_SECRET!) {
@@ -135,7 +135,7 @@ describe("3b. mudança de ciclo do cartão", () => {
     const before = await listInvoices(E(), card!.id);
     const current = monthStartOf(today);
     const pastInv = before.find((i) => i.reference_month < current)!;
-    await withUser(esposa.id, (db) => db.query("update fam_invoices set status = 'paga' where id = $1", [pastInv.id]));
+    await withUser(esposa.id, (db) => db.query("update fin_financeiro_invoices set status = 'paga' where id = $1", [pastInv.id]));
     const r = await updateCard(E(), card!.id, { nickname: "C6", brand: "visa", last4: "2222", closingDay: 1, dueDay: 8, limitCents: "1.000,00", visibility: "pessoal" }, today);
     const after = await listInvoices(E(), card!.id);
     const future = after.filter((i) => i.reference_month >= current && i.status === "aberta");
@@ -150,7 +150,7 @@ describe("3b. mudança de ciclo do cartão", () => {
     // os lançamentos continuam nas mesmas faturas e os totais batem
     expect(after.reduce((a, i) => a + i.total_cents, 0)).toBe(120000);
     // o marido não consegue mudar datas de fatura do cartão pessoal dela
-    const hack = await withUser(luiz.id, (db) => db.one<{ ok: boolean }>("select fam_set_invoice_dates($1, '2027-01-01', '2027-01-09', $2) as ok", [future[0]!.id, current]));
+    const hack = await withUser(luiz.id, (db) => db.one<{ ok: boolean }>("select fin_financeiro_set_invoice_dates($1, '2027-01-01', '2027-01-09', $2) as ok", [future[0]!.id, current]));
     expect(hack?.ok).toBe(false);
   });
 });
@@ -182,7 +182,7 @@ describe("5. fila de revisão (fatura PDF/Gmail)", () => {
     const magazine = pending.find((p) => p.description === "MAGAZINE LOJA" && p.installment_total === 6)!;
     expect(magazine).toBeTruthy();
     const entryId = await approveReview(L(), magazine.id);
-    const inv = await withUser(luiz.id, (db) => db.one<{ invoice_id: string; card_id: string }>("select invoice_id, card_id from fam_entries where id = $1", [entryId]));
+    const inv = await withUser(luiz.id, (db) => db.one<{ invoice_id: string; card_id: string }>("select invoice_id, card_id from fin_financeiro_entries where id = $1", [entryId]));
     expect(inv?.card_id).toBe(NUBANK);
     expect(inv?.invoice_id).toBeTruthy();
     const estorno = pending.find((p) => p.kind === "receita")!;
@@ -198,13 +198,13 @@ describe("5b. PDF de fatura protegido por senha", () => {
     const pdf = makePdf(lines(), { userPassword: "52998224725" });
     const r1 = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload" });
     expect(r1).toMatchObject({ duplicate: false, parseError: "PDF protegido por senha", inserted: 0 });
-    const doc = await withUser(luiz.id, (db) => db.one<{ parse_error: string }>("select parse_error from fam_invoice_documents where id = $1", [r1.documentId]));
+    const doc = await withUser(luiz.id, (db) => db.one<{ parse_error: string }>("select parse_error from fin_financeiro_invoice_documents where id = $1", [r1.documentId]));
     expect(doc?.parse_error).toBe("PDF protegido por senha");
     const wrong = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload", password: "000" });
     expect(wrong.parseError).toBe("Senha do PDF incorreta");
     const ok = await ingestDocument(L(), { bytes: pdf, fileName: "fatura-protegida.pdf", source: "upload", password: "52998224725" });
     expect(ok).toMatchObject({ duplicate: false, parseError: null, inserted: 2, reprocessed: true, documentId: r1.documentId });
-    const fixed = await withUser(luiz.id, (db) => db.one<{ parse_error: string | null; parsed_items: number }>("select parse_error, parsed_items from fam_invoice_documents where id = $1", [r1.documentId]));
+    const fixed = await withUser(luiz.id, (db) => db.one<{ parse_error: string | null; parsed_items: number }>("select parse_error, parsed_items from fin_financeiro_invoice_documents where id = $1", [r1.documentId]));
     expect(fixed).toEqual({ parse_error: null, parsed_items: 2 });
     // de novo, depois de lido: duplicado
     expect((await ingestDocument(L(), { bytes: pdf, fileName: "x.pdf", source: "upload", password: "52998224725" })).duplicate).toBe(true);
@@ -213,11 +213,11 @@ describe("5b. PDF de fatura protegido por senha", () => {
     await savePdfPassword(L(), "52998224725");
     expect(await hasPdfPassword(L())).toBe(true);
     expect(await hasPdfPassword(E())).toBe(false);
-    const raw = await withService((db) => db.one<{ password_enc: string }>("select password_enc from fam_pdf_passwords where user_id = $1", [luiz.id]));
+    const raw = await withService((db) => db.one<{ password_enc: string }>("select password_enc from fin_financeiro_pdf_passwords where user_id = $1", [luiz.id]));
     expect(raw?.password_enc).toMatch(/^v1\./);
     expect(raw?.password_enc).not.toContain("52998224725");
     expect(await pdfPasswordForJob(luiz.id)).toBe("52998224725");
-    await expect(withUser(luiz.id, (db) => db.query("select * from fam_pdf_passwords"))).rejects.toThrow(/permission denied/);
+    await expect(withUser(luiz.id, (db) => db.query("select * from fin_financeiro_pdf_passwords"))).rejects.toThrow(/permission denied/);
     await clearPdfPassword(L());
     expect(await hasPdfPassword(L())).toBe(false);
   });
@@ -245,18 +245,18 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
     expect(again.result.transactions).toBe(0);
 
     const imported = await withUser(esposa.id, (db) => db.query<{ description: string; visibility: string; category: string | null }>(
-      "select e.description, e.visibility, c.name as category from fam_entries e left join fam_categories c on c.id = e.category_id where e.source = 'pluggy'"));
+      "select e.description, e.visibility, c.name as category from fin_financeiro_entries e left join fin_financeiro_categories c on c.id = e.category_id where e.source = 'pluggy'"));
     expect(imported.every((e) => e.visibility === "pessoal")).toBe(true);
     expect(imported.find((e) => e.description === "UBER *TRIP")?.category).toBe("Transporte");
     expect(imported.find((e) => e.description.startsWith("SUPERMERCADO"))?.category).toBe("Mercado");
     expect(imported.find((e) => e.description === "NETFLIX.COM")?.category).toBe("Assinaturas");
-    expect(await withUser(luiz.id, (db) => db.query("select 1 from fam_entries where source = 'pluggy'"))).toHaveLength(0);
+    expect(await withUser(luiz.id, (db) => db.query("select 1 from fin_financeiro_entries where source = 'pluggy'"))).toHaveLength(0);
 
-    const visa = await withUser(esposa.id, (db) => db.one<{ id: string }>("select id from fam_cards where nickname = 'Cartão Simulado Visa'"));
+    const visa = await withUser(esposa.id, (db) => db.one<{ id: string }>("select id from fin_financeiro_cards where nickname = 'Cartão Simulado Visa'"));
     await setAccountVisibility(E(), "cartao", visa!.id, "compartilhado", true);
-    const nowVisible = await withUser(luiz.id, (db) => db.query("select 1 from fam_entries where source = 'pluggy' and card_id = $1", [visa!.id]));
+    const nowVisible = await withUser(luiz.id, (db) => db.query("select 1 from fin_financeiro_entries where source = 'pluggy' and card_id = $1", [visa!.id]));
     expect(nowVisible.length).toBeGreaterThan(0);
-    const bills = await withUser(esposa.id, (db) => db.query<{ description: string; boleto_line: string | null; pix_code: string | null }>("select description, boleto_line, pix_code from fam_bills where source = 'pluggy' order by description"));
+    const bills = await withUser(esposa.id, (db) => db.query<{ description: string; boleto_line: string | null; pix_code: string | null }>("select description, boleto_line, pix_code from fin_financeiro_bills where source = 'pluggy' order by description"));
     expect(bills.find((b) => b.description.includes("Master"))?.boleto_line).toBeNull();
     expect(bills.find((b) => b.description.includes("Visa"))?.boleto_line).toMatch(/^\d{47}$/);
   });
@@ -265,7 +265,7 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
     type Row = { description: string; kind: "receita" | "despesa"; amount_cents: number; cost_type: "fixa" | "variavel"; payment_method: string;
       card_id: string | null; invoice_id: string | null; exclude_from_reports: boolean; exclude_reason: string | null };
     const rows = await withUser(esposa.id, (db) => db.query<Row>(
-      "select description, kind, amount_cents, cost_type, payment_method, card_id, invoice_id, exclude_from_reports, exclude_reason from fam_entries where source = 'pluggy'"));
+      "select description, kind, amount_cents, cost_type, payment_method, card_id, invoice_id, exclude_from_reports, exclude_reason from fin_financeiro_entries where source = 'pluggy'"));
     const by = (d: string) => rows.find((r) => r.description === d)!;
     expect(by("PAG FATURA CARTAO SIMULADO VISA")).toMatchObject({ exclude_from_reports: true, exclude_reason: "pagamento_fatura", kind: "despesa" });
     expect(by("TRANSF MESMA TITULARIDADE POUPANCA")).toMatchObject({ exclude_from_reports: true, exclude_reason: "transferencia" });
@@ -277,20 +277,20 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
     expect(s.receitas).toBe(651237);
     expect(s.despesas).toBe(397431);
     // o total da fatura abate o estorno mas não o pagamento
-    const visa = await withUser(esposa.id, (db) => db.one<{ id: string }>("select id from fam_cards where nickname = 'Cartão Simulado Visa'"));
+    const visa = await withUser(esposa.id, (db) => db.one<{ id: string }>("select id from fin_financeiro_cards where nickname = 'Cartão Simulado Visa'"));
     const totals = await withService((db) => db.query<{ total_cents: number; s: number }>(
       `select i.total_cents, coalesce(sum(case when e.kind='despesa' then e.amount_cents else -e.amount_cents end), 0)::bigint s
-         from fam_invoices i left join fam_entries e on e.invoice_id = i.id where i.card_id = $1 group by i.id`, [visa!.id]));
+         from fin_financeiro_invoices i left join fin_financeiro_entries e on e.invoice_id = i.id where i.card_id = $1 group by i.id`, [visa!.id]));
     const allInvoices = totals.reduce((a, t) => a + t.total_cents, 0);
     expect(allInvoices).toBe(129673 - 2390); // compras do Visa - estorno; o pagamento de R$ 980 não entra
     for (const t of totals) expect(t.total_cents).toBe(Number(t.s));
   });
 
   it("parcelas do Open Finance: billId vai para a fatura do banco; sem billId desloca (n-1) meses", async () => {
-    const visa = await withUser(esposa.id, (db) => db.one<{ id: string; closing_day: number; due_day: number }>("select id, closing_day, due_day from fam_cards where nickname = 'Cartão Simulado Visa'"));
+    const visa = await withUser(esposa.id, (db) => db.one<{ id: string; closing_day: number; due_day: number }>("select id, closing_day, due_day from fin_financeiro_cards where nickname = 'Cartão Simulado Visa'"));
     const cycle = { closingDay: visa!.closing_day, dueDay: visa!.due_day };
     const get = (d: string) => withUser(esposa.id, (db) => db.one<{ budget_month: string; reference_month: string; installment_number: number }>(
-      "select e.budget_month, i.reference_month, e.installment_number from fam_entries e join fam_invoices i on i.id = e.invoice_id where e.description = $1", [d]));
+      "select e.budget_month, i.reference_month, e.installment_number from fin_financeiro_entries e join fin_financeiro_invoices i on i.id = e.invoice_id where e.description = $1", [d]));
     const purchase = addDays(todayISO(), -70);
     const magazine = await get("MAGAZINE LUIZA");
     expect(magazine?.installment_number).toBe(3);
@@ -302,13 +302,13 @@ describe("6. Open Finance (Pluggy mock): conectar -> webhook -> importar -> cate
   });
 
   it("pagar a fatura importada não cria despesa nova e marca a fatura do cartão como paga", async () => {
-    const bill = await withUser(esposa.id, (db) => db.one<{ id: string; card_id: string; due_date: string }>("select id, card_id, due_date from fam_bills where source = 'pluggy' and description like '%Visa%'"));
-    const before = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where owner_id = $1", [esposa.id]));
+    const bill = await withUser(esposa.id, (db) => db.one<{ id: string; card_id: string; due_date: string }>("select id, card_id, due_date from fin_financeiro_bills where source = 'pluggy' and description like '%Visa%'"));
+    const before = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_entries where owner_id = $1", [esposa.id]));
     const r = await payBill(E(), bill!.id);
     expect(r).toEqual({ entryId: null, invoiceMarkedPaid: true });
-    const after = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where owner_id = $1", [esposa.id]));
+    const after = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_entries where owner_id = $1", [esposa.id]));
     expect(after!.n).toBe(before!.n);
-    const inv = await withService((db) => db.one<{ status: string }>("select status from fam_invoices where card_id = $1 and reference_month = date_trunc('month', $2::date)::date", [bill!.card_id, bill!.due_date]));
+    const inv = await withService((db) => db.one<{ status: string }>("select status from fin_financeiro_invoices where card_id = $1 and reference_month = date_trunc('month', $2::date)::date", [bill!.card_id, bill!.due_date]));
     expect(inv?.status).toBe("paga");
   });
 });
@@ -334,7 +334,7 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
     const r = await sendWa(luiz.phone, "gastei 50 mercado", "MSG-1");
     expect(r.status).toBe("processado");
     const e = await withUser(luiz.id, (db) => db.one<{ amount_cents: number; category: string; visibility: string }>(
-      "select e.amount_cents, c.name as category, e.visibility from fam_entries e left join fam_categories c on c.id = e.category_id where e.source = 'whatsapp' order by e.created_at desc limit 1"));
+      "select e.amount_cents, c.name as category, e.visibility from fin_financeiro_entries e left join fin_financeiro_categories c on c.id = e.category_id where e.source = 'whatsapp' order by e.created_at desc limit 1"));
     expect(e).toEqual({ amount_cents: 5000, category: "Mercado", visibility: "pessoal" });
     const out = await outbox(luiz.id);
     expect(out.at(-1)?.body).toContain("R$ 50,00");
@@ -345,7 +345,7 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
     const realJid = lid.data.key.remoteJid;
     Object.assign(lid.data.key, { remoteJid: "201234567890123@lid", remoteJidAlt: realJid });
     expect(((await (await whatsappWebhook(waRequest(lid))).json()) as { status: string }).status).toBe("processado");
-    const e = await withUser(esposa.id, (db) => db.one<{ description: string }>("select description from fam_entries where source = 'whatsapp' order by created_at desc limit 1"));
+    const e = await withUser(esposa.id, (db) => db.one<{ description: string }>("select description from fin_financeiro_entries where source = 'whatsapp' order by created_at desc limit 1"));
     expect(e?.description).toBe("padaria");
     const noNumber = evolutionPayload(esposa.phone, "saldo");
     noNumber.data.key.remoteJid = "201234567890123@lid";
@@ -367,7 +367,7 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
   });
   it("comandos recebi / saldo / fatura nubank / contas / ajuda", async () => {
     await sendWa(esposa.phone, "recebi 3000 salario");
-    const inc = await withUser(esposa.id, (db) => db.one<{ kind: string; category: string }>("select e.kind, c.name as category from fam_entries e join fam_categories c on c.id = e.category_id where e.source='whatsapp' order by e.created_at desc limit 1"));
+    const inc = await withUser(esposa.id, (db) => db.one<{ kind: string; category: string }>("select e.kind, c.name as category from fin_financeiro_entries e join fin_financeiro_categories c on c.id = e.category_id where e.source='whatsapp' order by e.created_at desc limit 1"));
     expect(inc).toEqual({ kind: "receita", category: "Salário" });
     await sendWa(esposa.phone, "saldo");
     await sendWa(esposa.phone, "fatura nubank");
@@ -381,13 +381,13 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
   });
   it("'desfazer' apaga apenas o último gasto do próprio remetente via WhatsApp", async () => {
     await sendWa(luiz.phone, "gastei 19,90 padaria");
-    const before = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where source = 'whatsapp' and owner_id = $1", [luiz.id]));
+    const before = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_entries where source = 'whatsapp' and owner_id = $1", [luiz.id]));
     await sendWa(luiz.phone, "desfazer");
-    const after = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where source = 'whatsapp' and owner_id = $1", [luiz.id]));
+    const after = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_entries where source = 'whatsapp' and owner_id = $1", [luiz.id]));
     expect(after!.n).toBe(before!.n - 1);
     expect((await outbox(luiz.id)).at(-1)?.body).toContain("Desfeito");
     // a receita da esposa não foi tocada
-    expect((await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_entries where source='whatsapp' and owner_id=$1 and kind='receita'", [esposa.id])))!.n).toBe(1);
+    expect((await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_entries where source='whatsapp' and owner_id=$1 and kind='receita'", [esposa.id])))!.n).toBe(1);
   });
 });
 
@@ -401,14 +401,14 @@ describe("8. alertas de vencimento: código em mensagem separada, respeitando vi
     const r = await runDueAlerts(new Date(), failing);
     expect(r.sent).toBe(0);
     expect(r.failed).toBeGreaterThan(0);
-    const claims = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_notification_log where kind in ('bill_due','invoice_due')"));
+    const claims = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_notification_log where kind in ('bill_due','invoice_due')"));
     expect(claims!.n).toBe(0);
-    const errors = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fam_whatsapp_messages where status = 'erro' and error = 'falha simulada'"));
+    const errors = await withService((db) => db.one<{ n: number }>("select count(*)::int n from fin_financeiro_whatsapp_messages where status = 'erro' and error = 'falha simulada'"));
     expect(errors!.n).toBeGreaterThan(0);
   });
 
   it("conta compartilhada -> os dois; pessoal -> só o dono; Pix sozinho na mensagem", async () => {
-    const condPix = (await withService((db) => db.one<{ pix_code: string }>("select pix_code from fam_bills where description = 'Condomínio'")))!.pix_code;
+    const condPix = (await withService((db) => db.one<{ pix_code: string }>("select pix_code from fin_financeiro_bills where description = 'Condomínio'")))!.pix_code;
     const res = await cronRoute(new Request("http://localhost/api/cron/whatsapp-due-alerts", { headers: { authorization: `Bearer ${process.env.CRON_SECRET}` } }), { params: Promise.resolve({ job: "whatsapp-due-alerts" }) });
     expect(res.status).toBe(200);
     const luizOut = (await outbox(luiz.id)).filter((m) => m.direction === "out").map((m) => m.body);
@@ -476,7 +476,7 @@ describe("9. metas, busca, patrimônio, investimentos, comparação", () => {
   it("comparação entre membros nunca inclui pessoais", async () => {
     const r = await membersComparison(E(), month, "valores");
     const luizShared = await withService((db) => db.one<{ s: number }>(
-      "select coalesce(sum(amount_cents),0)::bigint s from fam_entries where owner_id=$1 and visibility='compartilhado' and kind='despesa' and budget_month=$2", [luiz.id, month]));
+      "select coalesce(sum(amount_cents),0)::bigint s from fin_financeiro_entries where owner_id=$1 and visibility='compartilhado' and kind='despesa' and budget_month=$2", [luiz.id, month]));
     expect(r.members.find((m) => m.memberId === luiz.id)?.totalCents).toBe(Number(luizShared!.s));
   });
 });

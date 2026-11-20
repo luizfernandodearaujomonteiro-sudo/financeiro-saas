@@ -14,7 +14,7 @@ export interface Prefs {
 export const DEFAULT_PREFS: Prefs = { theme_mode: "dark", auto_dark_start: 18, auto_dark_end: 6, comparison_mode: "valores", daily_reminder: true, weekly_summary: true };
 
 export async function getPrefs(userId: string): Promise<Prefs> {
-  const r = await withUser(userId, (db) => db.one<Prefs>("select theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary from public.fam_profile_prefs where user_id = auth.uid()"));
+  const r = await withUser(userId, (db) => db.one<Prefs>("select theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary from public.fin_financeiro_profile_prefs where user_id = auth.uid()"));
   return r ?? DEFAULT_PREFS;
 }
 
@@ -43,7 +43,7 @@ export async function savePrefs(userId: string, raw: unknown) {
   };
   await withUser(userId, (db) =>
     db.query(
-      `insert into public.fam_profile_prefs (user_id, theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary)
+      `insert into public.fin_financeiro_profile_prefs (user_id, theme_mode, auto_dark_start, auto_dark_end, comparison_mode, daily_reminder, weekly_summary)
        values (auth.uid(), $1, $2, $3, $4, $5, $6)
        on conflict (user_id) do update set theme_mode = excluded.theme_mode, auto_dark_start = excluded.auto_dark_start,
          auto_dark_end = excluded.auto_dark_end, comparison_mode = excluded.comparison_mode,

@@ -27,10 +27,10 @@ export const env = {
     const url = process.env.DATABASE_URL;
     if (url) return url;
     if (bool(process.env.LOCAL_DEV_AUTH)) {
-      // local: conecta como fam_app (NOINHERIT), igual à produção — nunca como superusuário
+      // local: conecta como fin_financeiro_app (NOINHERIT), igual à produção — nunca como superusuário
       const port = process.env.LOCAL_PG_PORT ?? "54329";
       const pw = encodeURIComponent(process.env.LOCAL_PG_APP_PASSWORD ?? "fam-app-local-dev");
-      return `postgres://fam_app:${pw}@127.0.0.1:${port}/${process.env.LOCAL_PG_DATABASE ?? "financeiro"}`;
+      return `postgres://fin_financeiro_app:${pw}@127.0.0.1:${port}/${process.env.LOCAL_PG_DATABASE ?? "financeiro"}`;
     }
     throw new Error("DATABASE_URL não configurada");
   },

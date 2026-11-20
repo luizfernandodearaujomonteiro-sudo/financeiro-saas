@@ -1,6 +1,6 @@
 /**
- * Bootstrap da família em PRODUÇÃO (Supabase compartilhado). Escreve SOMENTE em tabelas fam_
- * via as funções fam_bootstrap_household / fam_bootstrap_add_member.
+ * Bootstrap da família em PRODUÇÃO (Supabase compartilhado). Escreve SOMENTE em tabelas fin_financeiro_
+ * via as funções fin_financeiro_bootstrap_household / fin_financeiro_bootstrap_add_member.
  * As contas precisam existir no auth.users (crie no painel do Supabase Auth ou use contas existentes).
  *
  *   DATABASE_URL_ADMIN=... npx tsx scripts/bootstrap.ts --owner-email luiz@... --owner-name Luiz \
@@ -32,9 +32,9 @@ async function main() {
     console.log(`Família "${household}": dono ${ownerEmail}${memberEmail ? `, membro ${memberEmail}` : ""}`);
     if (!apply) return console.log("Dry-run. Rode novamente com --yes para aplicar.");
     await c.query("begin");
-    const hh = (await c.query("select public.fam_bootstrap_household($1, $2, $3) as id", [owner, household, ownerName])).rows[0].id;
-    if (member) await c.query("select public.fam_bootstrap_add_member($1, $2, $3)", [hh, member, memberName]);
-    await c.query("insert into public.fam_household_settings (household_id) values ($1) on conflict do nothing", [hh]);
+    const hh = (await c.query("select public.fin_financeiro_bootstrap_household($1, $2, $3) as id", [owner, household, ownerName])).rows[0].id;
+    if (member) await c.query("select public.fin_financeiro_bootstrap_add_member($1, $2, $3)", [hh, member, memberName]);
+    await c.query("insert into public.fin_financeiro_household_settings (household_id) values ($1) on conflict do nothing", [hh]);
     await c.query("commit");
     console.log(`OK — família criada: ${hh}`);
   } catch (e) {

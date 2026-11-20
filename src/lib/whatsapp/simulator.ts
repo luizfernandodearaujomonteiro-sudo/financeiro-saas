@@ -1,4 +1,4 @@
-/** Provedor simulado: não chama nenhuma API. As mensagens ficam em fam_whatsapp_messages. */
+/** Provedor simulado: não chama nenhuma API. As mensagens ficam em fin_financeiro_whatsapp_messages. */
 import type { WhatsAppProvider } from "./provider";
 
 export function createSimulatorProvider(): WhatsAppProvider {

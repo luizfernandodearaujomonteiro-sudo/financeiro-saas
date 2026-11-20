@@ -17,6 +17,6 @@ export async function GET() {
   }
   if (env.gmailMode !== "live" || !process.env.GOOGLE_CLIENT_ID) return Response.redirect(`${env.appUrl}/configuracoes?gmail=nao-configurado`, 303);
   const { state, nonce } = createState(user.id);
-  (await cookies()).set("fam_oauth_nonce", nonce, { httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https://"), path: "/api/integrations/gmail", maxAge: 600 });
+  (await cookies()).set("fin_financeiro_oauth_nonce", nonce, { httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https://"), path: "/api/integrations/gmail", maxAge: 600 });
   return Response.redirect(authUrl(state), 303);
 }

@@ -41,16 +41,16 @@ grant execute on function auth.uid(), auth.role() to anon, authenticated, servic
 grant usage on schema public to anon, authenticated, service_role;
 revoke all on auth.users from anon, authenticated;
 
--- Papel de login dedicado do app (espelha supabase/manual/fam_app_role.sql).
--- NOINHERIT: conectado como fam_app, sem SET ROLE não há privilégio nenhum.
+-- Papel de login dedicado do app (espelha supabase/manual/fin_financeiro_app_role.sql).
+-- NOINHERIT: conectado como fin_financeiro_app, sem SET ROLE não há privilégio nenhum.
 -- A senha local é definida pelo scripts/db/migrate.ts (LOCAL_PG_APP_PASSWORD).
 do $$
 begin
-  if not exists (select 1 from pg_roles where rolname = 'fam_app') then
-    create role fam_app login noinherit;
+  if not exists (select 1 from pg_roles where rolname = 'fin_financeiro_app') then
+    create role fin_financeiro_app login noinherit;
   end if;
 end $$;
-grant anon, authenticated, service_role to fam_app;
+grant anon, authenticated, service_role to fin_financeiro_app;
 
 -- Somente local: o verificador de senha do modo LOCAL_DEV_AUTH lê o shim auth.users como service_role.
 grant select on auth.users to service_role;

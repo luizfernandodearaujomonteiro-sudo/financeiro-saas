@@ -52,7 +52,7 @@ export default async function ConfiguracoesPage({ searchParams }: { searchParams
     getPublicConfigAsUser(ctx, isOwner),
     withUser(member.userId, (db) =>
       db.one<{ status: string; email: string | null; last_sync_at: Date | null; last_error: string | null }>(
-        "select status, email, last_sync_at, last_error from public.fam_gmail_connections where user_id = auth.uid()",
+        "select status, email, last_sync_at, last_error from public.fin_financeiro_gmail_connections where user_id = auth.uid()",
       ),
     ),
     hasPdfPassword(ctx),

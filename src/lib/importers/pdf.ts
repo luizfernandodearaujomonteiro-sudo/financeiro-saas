@@ -54,7 +54,7 @@ export async function ingestDocument(
   if (input.bytes.length > MAX_PDF_BYTES) throw new Error("PDF maior que 8 MB");
   const sha = sha256Hex(input.bytes);
   const existing = await withUser(ctx.userId, (db) =>
-    db.one<{ id: string; parse_error: string | null }>("select id, parse_error from public.fam_invoice_documents where owner_id = auth.uid() and sha256 = $1", [sha]),
+    db.one<{ id: string; parse_error: string | null }>("select id, parse_error from public.fin_financeiro_invoice_documents where owner_id = auth.uid() and sha256 = $1", [sha]),
   );
   if (existing && !existing.parse_error) return { duplicate: true as const, documentId: existing.id, parsed: 0, inserted: 0, parseError: null };
 
@@ -65,7 +65,7 @@ export async function ingestDocument(
     await putObject(storagePath, input.bytes, isPdf ? "application/pdf" : "text/plain");
     const doc = await withUser(ctx.userId, (db) =>
       db.one<{ id: string }>(
-        `insert into public.fam_invoice_documents (household_id, owner_id, card_id, source, gmail_message_id, file_name, storage_path, sha256)
+        `insert into public.fin_financeiro_invoice_documents (household_id, owner_id, card_id, source, gmail_message_id, file_name, storage_path, sha256)
          values ($1, auth.uid(), $2, $3, $4, $5, $6, $7) returning id`,
         [ctx.householdId, input.cardId ?? null, input.source, input.gmailMessageId ?? null, input.fileName.slice(0, 200), storagePath, sha],
       ),
@@ -86,7 +86,7 @@ export async function ingestDocument(
     ? { parsed: 0, inserted: 0, duplicates: 0 }
     : await ingestStatement(ctx, { text, source: input.source, documentId, cardId: input.cardId, reference: todayISO() });
   await withUser(ctx.userId, (db) =>
-    db.query("update public.fam_invoice_documents set parsed_items = $2, parse_error = $3 where id = $1", [documentId, r.parsed, parseError]),
+    db.query("update public.fin_financeiro_invoice_documents set parsed_items = $2, parse_error = $3 where id = $1", [documentId, r.parsed, parseError]),
   );
   return { duplicate: false as const, documentId, parsed: r.parsed, inserted: r.inserted, parseError, reprocessed: Boolean(existing) };
 }

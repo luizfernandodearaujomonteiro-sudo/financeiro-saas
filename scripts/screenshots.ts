@@ -68,7 +68,7 @@ async function main() {
 
     // ---- Luiz (dono), tema escuro, desktop ----
     const ctxL = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-    await ctxL.addCookies([{ name: "fam_theme", value: "dark", url: BASE }]);
+    await ctxL.addCookies([{ name: "fin_financeiro_theme", value: "dark", url: BASE }]);
     const p = await ctxL.newPage();
     await page_login_check(p);
     await shot(p, "01-painel-escuro", "/painel", "Resultado do mês");
@@ -135,7 +135,7 @@ async function main() {
 
     // ---- Mobile (escuro) ----
     const ctxM = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-    await ctxM.addCookies([{ name: "fam_theme", value: "dark", url: BASE }]);
+    await ctxM.addCookies([{ name: "fin_financeiro_theme", value: "dark", url: BASE }]);
     const m = await ctxM.newPage();
     await login(m, "luiz@familia.local", "Luiz@Local2026");
     await shot(m, "16-mobile-painel", "/painel", "Resultado do mês");

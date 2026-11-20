@@ -64,9 +64,9 @@ export async function runGmailSync() {
   if (mode === "off") return { skipped: "GMAIL_MODE=off" };
   const conns = await withService((db) =>
     db.query<Conn>(
-      `select g.user_id, m.household_id, t.refresh_token_enc from public.fam_gmail_connections g
-         join public.fam_household_members m on m.user_id = g.user_id
-         left join public.fam_oauth_tokens t on t.user_id = g.user_id and t.provider = 'gmail'
+      `select g.user_id, m.household_id, t.refresh_token_enc from public.fin_financeiro_gmail_connections g
+         join public.fin_financeiro_household_members m on m.user_id = g.user_id
+         left join public.fin_financeiro_oauth_tokens t on t.user_id = g.user_id and t.provider = 'gmail'
         where g.status = 'conectado'`,
     ),
   );
@@ -90,11 +90,11 @@ export async function runGmailSync() {
           items += r.inserted;
         }
       }
-      await withService((db) => db.query("update public.fam_gmail_connections set last_sync_at = now(), last_error = null, status = 'conectado' where user_id = $1", [c.user_id]));
+      await withService((db) => db.query("update public.fin_financeiro_gmail_connections set last_sync_at = now(), last_error = null, status = 'conectado' where user_id = $1", [c.user_id]));
       summary.push({ userId: c.user_id, documents: docs, items });
     } catch (e) {
       const msg = e instanceof Error ? e.message.slice(0, 200) : "erro";
-      await withService((db) => db.query("update public.fam_gmail_connections set last_error = $2, status = 'erro' where user_id = $1", [c.user_id, msg]));
+      await withService((db) => db.query("update public.fin_financeiro_gmail_connections set last_error = $2, status = 'erro' where user_id = $1", [c.user_id, msg]));
       summary.push({ userId: c.user_id, documents: 0, items: 0, error: msg });
     }
   }
@@ -103,5 +103,5 @@ export async function runGmailSync() {
 
 /** Modo mock: "conecta" o Gmail do usuário sem OAuth (somente local). */
 export async function connectMockGmail(userId: string) {
-  await withUser(userId, (db) => db.query("select public.fam_store_gmail_token($1, $2, $3)", ["mock", "voce@exemplo.local", "mock"]));
+  await withUser(userId, (db) => db.query("select public.fin_financeiro_store_gmail_token($1, $2, $3)", ["mock", "voce@exemplo.local", "mock"]));
 }

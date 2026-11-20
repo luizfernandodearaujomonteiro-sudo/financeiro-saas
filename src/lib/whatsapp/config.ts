@@ -63,9 +63,9 @@ async function loadRow(db: Db, householdId: string): Promise<Row | null> {
   return db.one<Row>(
     `select c.provider, c.display_number, c.evolution_base_url, c.evolution_instance, c.meta_phone_number_id,
             s.evolution_token_enc, s.meta_access_token_enc
-       from public.fam_households h
-       left join public.fam_whatsapp_config c on c.household_id = h.id
-       left join public.fam_whatsapp_secrets s on s.household_id = h.id
+       from public.fin_financeiro_households h
+       left join public.fin_financeiro_whatsapp_config c on c.household_id = h.id
+       left join public.fin_financeiro_whatsapp_secrets s on s.household_id = h.id
       where h.id = $1`,
     [householdId],
   );
@@ -128,16 +128,16 @@ export async function getProvider(householdId: string, db?: Db): Promise<WhatsAp
 
 /**
  * Para requisições do painel: lê a configuração com RLS do usuário. Segredos
- * cifrados só via RPC exclusiva do dono (fam_get_whatsapp_secrets); para membros
+ * cifrados só via RPC exclusiva do dono (fin_financeiro_get_whatsapp_secrets); para membros
  * comuns os segredos ficam nulos.
  */
 async function loadRowAsUser(ctx: { userId: string; householdId: string }, isOwner: boolean): Promise<Row> {
   return withUser(ctx.userId, async (db) => {
     const cfg = await db.one<Omit<Row, "evolution_token_enc" | "meta_access_token_enc">>(
-      "select provider, display_number, evolution_base_url, evolution_instance, meta_phone_number_id from public.fam_whatsapp_config where household_id = $1",
+      "select provider, display_number, evolution_base_url, evolution_instance, meta_phone_number_id from public.fin_financeiro_whatsapp_config where household_id = $1",
       [ctx.householdId],
     );
-    const sec = isOwner ? await db.one<{ evolution_token_enc: string | null; meta_access_token_enc: string | null }>("select * from public.fam_get_whatsapp_secrets()") : null;
+    const sec = isOwner ? await db.one<{ evolution_token_enc: string | null; meta_access_token_enc: string | null }>("select * from public.fin_financeiro_get_whatsapp_secrets()") : null;
     return {
       provider: cfg?.provider ?? env.whatsappProvider,
       display_number: cfg?.display_number ?? null,

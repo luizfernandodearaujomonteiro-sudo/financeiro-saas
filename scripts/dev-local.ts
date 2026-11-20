@@ -15,7 +15,7 @@ async function main() {
   await migrate(url, () => {}, { appPassword: o.appPassword });
   const c = new pg.Client({ connectionString: url });
   await c.connect();
-  const n = (await c.query("select count(*)::int n from public.fam_households")).rows[0].n;
+  const n = (await c.query("select count(*)::int n from public.fin_financeiro_households")).rows[0].n;
   await c.end();
   if (!n) await seed(url);
   console.log(`\nPostgres local em 127.0.0.1:${o.port}. Abrindo o app em http://localhost:3000 …\n`);

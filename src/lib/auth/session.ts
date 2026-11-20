@@ -11,7 +11,7 @@ import { authenticate, localVerifier, type LoginResult, type PasswordVerifier } 
 import { signSession, verifySession } from "./token";
 import { supabaseServer } from "./supabase";
 
-export const LOCAL_COOKIE = "fam_session";
+export const LOCAL_COOKIE = "fin_financeiro_session";
 const LOCAL_TTL_SECONDS = 60 * 60 * 12;
 
 export interface SessionUser {

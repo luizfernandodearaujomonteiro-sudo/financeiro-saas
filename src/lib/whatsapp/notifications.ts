@@ -26,10 +26,10 @@ async function recipients(db: Db): Promise<Recipient[]> {
   return db.query<Recipient>(
     `select w.user_id, w.household_id, w.phone_e164, p.display_name,
             coalesce(pp.daily_reminder, true) as daily_reminder, coalesce(pp.weekly_summary, true) as weekly_summary
-       from public.fam_whatsapp_numbers w
-       join public.fam_household_members m on m.user_id = w.user_id and m.household_id = w.household_id
-       join public.fam_profiles p on p.id = w.user_id
-       left join public.fam_profile_prefs pp on pp.user_id = w.user_id`,
+       from public.fin_financeiro_whatsapp_numbers w
+       join public.fin_financeiro_household_members m on m.user_id = w.user_id and m.household_id = w.household_id
+       join public.fin_financeiro_profiles p on p.id = w.user_id
+       left join public.fin_financeiro_profile_prefs pp on pp.user_id = w.user_id`,
   );
 }
 
@@ -41,14 +41,14 @@ interface Claim {
 
 /** Reserva o envio (idempotência). Se o envio falhar por completo, a reserva é desfeita (releaseClaims). */
 async function claim(db: Db, userId: string, kind: string, ref: string): Promise<Claim | null> {
-  const r = await db.one("insert into public.fam_notification_log (user_id, kind, ref) values ($1,$2,$3) on conflict do nothing returning id", [userId, kind, ref]);
+  const r = await db.one("insert into public.fin_financeiro_notification_log (user_id, kind, ref) values ($1,$2,$3) on conflict do nothing returning id", [userId, kind, ref]);
   return r ? { userId, kind, ref } : null;
 }
 
 async function releaseClaims(claims: Claim[]) {
   if (!claims.length) return;
   await withService(async (db) => {
-    for (const c of claims) await db.query("delete from public.fam_notification_log where user_id = $1 and kind = $2 and ref = $3", [c.userId, c.kind, c.ref]);
+    for (const c of claims) await db.query("delete from public.fin_financeiro_notification_log where user_id = $1 and kind = $2 and ref = $3", [c.userId, c.kind, c.ref]);
   });
 }
 
@@ -89,16 +89,16 @@ export async function runDueAlerts(now = new Date(), provider?: WhatsAppProvider
   const today = todayISO(now);
   const plan = await withService(async (db) => {
     const people = await recipients(db);
-    const settings = new Map((await db.query<{ household_id: string; bill_alert_days: number }>("select household_id, bill_alert_days from public.fam_household_settings")).map((s) => [s.household_id, s.bill_alert_days]));
+    const settings = new Map((await db.query<{ household_id: string; bill_alert_days: number }>("select household_id, bill_alert_days from public.fin_financeiro_household_settings")).map((s) => [s.household_id, s.bill_alert_days]));
     const bills = await db.query<{
       id: string; household_id: string; owner_id: string; visibility: string; description: string; amount_cents: number; due_date: string;
       boleto_line: string | null; boleto_barcode: string | null; pix_code: string | null; pix_key: string | null; source: string;
-    }>("select * from public.fam_bills where status = 'pendente' and due_date between $1 and $2", [today, addDays(today, 15)]);
+    }>("select * from public.fin_financeiro_bills where status = 'pendente' and due_date between $1 and $2", [today, addDays(today, 15)]);
     const invoices = await db.query<{ id: string; household_id: string; owner_id: string; visibility: string; nickname: string; total_cents: number; due_date: string }>(
       `select i.id, i.household_id, c.owner_id, c.visibility, c.nickname, i.total_cents, i.due_date
-         from public.fam_invoices i join public.fam_cards c on c.id = i.card_id
+         from public.fin_financeiro_invoices i join public.fin_financeiro_cards c on c.id = i.card_id
         where i.status <> 'paga' and i.total_cents > 0 and i.due_date between $1 and $2
-          and not exists (select 1 from public.fam_bills b where b.card_id = c.id and b.due_date = i.due_date and b.status <> 'cancelada')`,
+          and not exists (select 1 from public.fin_financeiro_bills b where b.card_id = c.id and b.due_date = i.due_date and b.status <> 'cancelada')`,
       [today, addDays(today, 15)],
     );
     const out: PlanItem[] = [];
@@ -140,7 +140,7 @@ export async function runDailyReminder(now = new Date(), provider?: WhatsAppProv
       const cl = await claim(db, r.user_id, "daily", today);
       if (!cl) continue;
       const c = await db.one<{ n: number }>(
-        "select count(*)::int as n from public.fam_entries where owner_id = $1 and (created_at at time zone 'America/Sao_Paulo')::date = $2::date",
+        "select count(*)::int as n from public.fin_financeiro_entries where owner_id = $1 and (created_at at time zone 'America/Sao_Paulo')::date = $2::date",
         [r.user_id, today],
       );
       out.push({
@@ -168,7 +168,7 @@ export async function runWeeklySummary(now = new Date(), provider?: WhatsAppProv
       // despesas (estornos de cartão abatem; pagamentos de fatura/transferências próprias ficam de fora)
       const rows = await db.query<{ amount_cents: number; occurred_on: string; category: string | null }>(
         `select case when e.kind = 'despesa' then e.amount_cents else -e.amount_cents end as amount_cents, e.occurred_on, c.name as category
-           from public.fam_entries e left join public.fam_categories c on c.id = e.category_id
+           from public.fin_financeiro_entries e left join public.fin_financeiro_categories c on c.id = e.category_id
           where e.household_id = $1 and e.occurred_on between $2 and $3
             and not e.exclude_from_reports
             and (e.kind = 'despesa' or (e.kind = 'receita' and (e.payment_method = 'cartao_credito' or e.card_id is not null)))

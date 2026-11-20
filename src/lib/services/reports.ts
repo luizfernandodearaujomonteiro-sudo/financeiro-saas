@@ -27,7 +27,7 @@ export async function membersComparison(ctx: MemberCtx, month: MonthStart, mode:
     listEntriesForMonth(ctx, month, "familia"),
     withUser(ctx.userId, (db) =>
       db.query<{ id: string; name: string }>(
-        "select m.user_id as id, p.display_name as name from public.fam_household_members m join public.fam_profiles p on p.id = m.user_id where m.household_id = $1 order by m.role desc, p.display_name",
+        "select m.user_id as id, p.display_name as name from public.fin_financeiro_household_members m join public.fin_financeiro_profiles p on p.id = m.user_id where m.household_id = $1 order by m.role desc, p.display_name",
         [ctx.householdId],
       ),
     ),

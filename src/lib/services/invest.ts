@@ -22,19 +22,19 @@ export interface PositionView {
 }
 
 export async function linkInvestProfile(ctx: MemberCtx, visibility: "pessoal" | "compartilhado") {
-  return withUser(ctx.userId, async (db) => (await db.one<{ ok: boolean }>("select public.fam_link_invest_profile($1) as ok", [visibility]))?.ok ?? false);
+  return withUser(ctx.userId, async (db) => (await db.one<{ ok: boolean }>("select public.fin_financeiro_link_invest_profile($1) as ok", [visibility]))?.ok ?? false);
 }
 
 export async function investLinkStatus(ctx: MemberCtx) {
-  return withUser(ctx.userId, (db) => db.one<{ visibility: string }>("select visibility from public.fam_invest_links where user_id = auth.uid()"));
+  return withUser(ctx.userId, (db) => db.one<{ visibility: string }>("select visibility from public.fin_financeiro_invest_links where user_id = auth.uid()"));
 }
 
 export async function setInvestVisibility(ctx: MemberCtx, visibility: "pessoal" | "compartilhado") {
-  await withUser(ctx.userId, (db) => db.query("update public.fam_invest_links set visibility = $1 where user_id = auth.uid()", [visibility]));
+  await withUser(ctx.userId, (db) => db.query("update public.fin_financeiro_invest_links set visibility = $1 where user_id = auth.uid()", [visibility]));
 }
 
 export async function unlinkInvest(ctx: MemberCtx) {
-  await withUser(ctx.userId, (db) => db.query("delete from public.fam_invest_links where user_id = auth.uid()"));
+  await withUser(ctx.userId, (db) => db.query("delete from public.fin_financeiro_invest_links where user_id = auth.uid()"));
 }
 
 interface RawPos {
@@ -47,8 +47,8 @@ export async function listPositions(ctx: MemberCtx): Promise<PositionView[]> {
     let rows: RawPos[] = [];
     let txs: (InvestTx & { holding_id: string })[] = [];
     try {
-      rows = await db.query<RawPos>("select * from public.fam_invest_positions()");
-      txs = await db.query<InvestTx & { holding_id: string }>("select * from public.fam_invest_transactions()");
+      rows = await db.query<RawPos>("select * from public.fin_financeiro_invest_positions()");
+      txs = await db.query<InvestTx & { holding_id: string }>("select * from public.fin_financeiro_invest_transactions()");
     } catch {
       return []; // tabelas invest_* indisponíveis neste banco
     }

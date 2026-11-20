@@ -10,7 +10,7 @@
  *   service_role também alcança tabelas de outros apps do projeto (limitação
  *   conhecida, ver docs/ENTREGA.md) — por isso o uso é restrito e auditado.
  *
- * A conexão (DATABASE_URL) usa o papel fam_app (NOINHERIT): sem SET ROLE ele não
+ * A conexão (DATABASE_URL) usa o papel fin_financeiro_app (NOINHERIT): sem SET ROLE ele não
  * tem privilégio algum; nunca use o papel postgres no app.
  *
  * O userId passado para withUser SEMPRE vem da sessão validada no servidor

@@ -25,7 +25,7 @@ export default async function RevisaoPage() {
     listCategories(ctx),
     withUser(member.userId, (db) =>
       db.query<{ id: string; file_name: string | null; source: string; parse_error: string; created_at: Date }>(
-        "select id, file_name, source, parse_error, created_at from public.fam_invoice_documents where owner_id = auth.uid() and parse_error is not null order by created_at desc limit 10",
+        "select id, file_name, source, parse_error, created_at from public.fin_financeiro_invoice_documents where owner_id = auth.uid() and parse_error is not null order by created_at desc limit 10",
       ),
     ),
   ]);

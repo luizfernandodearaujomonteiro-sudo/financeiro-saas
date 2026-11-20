@@ -1,6 +1,6 @@
 import { resolveTheme, type ResolvedTheme, type ThemeMode } from "./domain/theme";
 
-export const THEME_COOKIE = "fam_theme";
+export const THEME_COOKIE = "fin_financeiro_theme";
 
 export function encodeTheme(mode: ThemeMode, start: number, end: number): string {
   return mode === "auto" ? `auto:${start}:${end}` : mode;

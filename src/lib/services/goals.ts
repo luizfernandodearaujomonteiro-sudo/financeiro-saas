@@ -45,14 +45,14 @@ export const goalInput = z.object({
 export async function listGoals(ctx: MemberCtx, current = currentMonthStart()): Promise<GoalWithProgress[]> {
   return withUser(ctx.userId, async (db) => {
     const goals = await db.query<GoalRow>(
-      `select g.*, p.display_name as owner_name from public.fam_goals g join public.fam_profiles p on p.id = g.owner_id
+      `select g.*, p.display_name as owner_name from public.fin_financeiro_goals g join public.fin_financeiro_profiles p on p.id = g.owner_id
         where g.household_id = $1 order by g.active desc, g.created_at`,
       [ctx.householdId],
     );
     const contribs = goals.length
       ? await db.query<{ id: string; goal_id: string; month: string; amount_cents: number; note: string | null; owner_name: string; created_at: string }>(
           `select c.id, c.goal_id, c.month, c.amount_cents, c.note, p.display_name as owner_name, c.created_at
-             from public.fam_goal_contributions c join public.fam_profiles p on p.id = c.owner_id
+             from public.fin_financeiro_goal_contributions c join public.fin_financeiro_profiles p on p.id = c.owner_id
             where c.goal_id = any($1::uuid[]) order by c.month desc, c.created_at desc`,
           [goals.map((g) => g.id)],
         )
@@ -76,7 +76,7 @@ export async function createGoal(ctx: MemberCtx, raw: unknown) {
   const v = goalInput.parse(raw);
   return withUser(ctx.userId, (db) =>
     db.one<{ id: string }>(
-      `insert into public.fam_goals (household_id, owner_id, visibility, name, kind, monthly_target_cents, total_target_cents, start_month)
+      `insert into public.fin_financeiro_goals (household_id, owner_id, visibility, name, kind, monthly_target_cents, total_target_cents, start_month)
        values ($1, auth.uid(), $2, $3, $4, $5, $6, $7) returning id`,
       [ctx.householdId, v.visibility, v.name, v.kind, v.monthlyTargetCents, v.totalTargetCents ?? null, v.startMonth],
     ),
@@ -96,7 +96,7 @@ export async function addContribution(ctx: MemberCtx, raw: unknown) {
   const v = contributionInput.parse(raw);
   return withUser(ctx.userId, (db) =>
     db.one<{ id: string }>(
-      `insert into public.fam_goal_contributions (household_id, goal_id, owner_id, month, amount_cents, entry_id, note)
+      `insert into public.fin_financeiro_goal_contributions (household_id, goal_id, owner_id, month, amount_cents, entry_id, note)
        values ($1, $2, auth.uid(), $3, $4, $5, $6) returning id`,
       [ctx.householdId, v.goalId, v.month, v.withdrawal ? -v.amountCents : v.amountCents, v.entryId ?? null, v.note ?? null],
     ),
@@ -104,5 +104,5 @@ export async function addContribution(ctx: MemberCtx, raw: unknown) {
 }
 
 export async function deleteGoal(ctx: MemberCtx, id: string) {
-  await withUser(ctx.userId, (db) => db.query("delete from public.fam_goals where id = $1 and owner_id = auth.uid()", [id]));
+  await withUser(ctx.userId, (db) => db.query("delete from public.fin_financeiro_goals where id = $1 and owner_id = auth.uid()", [id]));
 }

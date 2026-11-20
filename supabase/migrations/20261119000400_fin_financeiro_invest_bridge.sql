@@ -14,29 +14,29 @@
 -- Valores numeric são devolvidos como TEXTO para evitar float no cliente.
 -- =====================================================================
 
-create or replace function public.fam_link_invest_profile(p_visibility text default 'pessoal')
+create or replace function public.fin_financeiro_link_invest_profile(p_visibility text default 'pessoal')
 returns boolean language plpgsql security definer set search_path = '' as $$
 declare
-  v_household uuid := public.fam_current_household();
+  v_household uuid := public.fin_financeiro_current_household();
   v_exists boolean;
 begin
   if v_household is null then
-    raise exception 'fam: usuário sem família' using errcode = '42501';
+    raise exception 'fin_financeiro: usuário sem família' using errcode = '42501';
   end if;
   if p_visibility not in ('pessoal', 'compartilhado') then
-    raise exception 'fam: visibilidade inválida';
+    raise exception 'fin_financeiro: visibilidade inválida';
   end if;
   execute 'select exists (select 1 from public.invest_profiles where id = $1)' into v_exists using auth.uid();
   if not v_exists then
     return false;
   end if;
-  insert into public.fam_invest_links (user_id, household_id, invest_profile_id, visibility)
+  insert into public.fin_financeiro_invest_links (user_id, household_id, invest_profile_id, visibility)
     values (auth.uid(), v_household, auth.uid(), p_visibility)
     on conflict (user_id) do update set visibility = excluded.visibility;
   return true;
 end $$;
 
-create or replace function public.fam_invest_positions()
+create or replace function public.fin_financeiro_invest_positions()
 returns table (
   owner_id uuid, owner_name text, holding_id uuid, ticker text, asset_name text, asset_type text,
   currency text, broker_name text, total_quantity text, average_price text, total_invested text,
@@ -44,7 +44,7 @@ returns table (
 )
 language plpgsql stable security definer set search_path = '' as $$
 declare
-  v_household uuid := public.fam_current_household();
+  v_household uuid := public.fin_financeiro_current_household();
 begin
   if v_household is null then
     return;
@@ -53,8 +53,8 @@ begin
     select l.user_id, p.display_name, h.id, a.ticker::text, a.name::text, a.asset_type::text,
            a.currency::text, b.name::text, h.total_quantity::text, h.average_price::text,
            h.total_invested::text, pc.current_price::text, pc.fetched_at
-      from public.fam_invest_links l
-      join public.fam_profiles p on p.id = l.user_id
+      from public.fin_financeiro_invest_links l
+      join public.fin_financeiro_profiles p on p.id = l.user_id
       join public.invest_holdings h on h.user_id = l.invest_profile_id
       join public.invest_assets a on a.id = h.asset_id
       left join public.invest_brokers b on b.id = h.broker_id
@@ -64,11 +64,11 @@ begin
      order by p.display_name, a.ticker;
 end $$;
 
-create or replace function public.fam_invest_transactions()
+create or replace function public.fin_financeiro_invest_transactions()
 returns table (holding_id uuid, type text, quantity text, total_value text, fees text, executed_at timestamptz)
 language plpgsql stable security definer set search_path = '' as $$
 declare
-  v_household uuid := public.fam_current_household();
+  v_household uuid := public.fin_financeiro_current_household();
 begin
   if v_household is null then
     return;
@@ -76,14 +76,14 @@ begin
   return query
     select t.holding_id, t.type::text, t.quantity::text, t.total_value::text,
            coalesce(t.fees, 0)::text, t.executed_at
-      from public.fam_invest_links l
+      from public.fin_financeiro_invest_links l
       join public.invest_transactions t on t.user_id = l.invest_profile_id
      where l.household_id = v_household
        and (l.user_id = auth.uid() or l.visibility = 'compartilhado')
      order by t.executed_at;
 end $$;
 
-revoke execute on function public.fam_link_invest_profile(text), public.fam_invest_positions(), public.fam_invest_transactions()
+revoke execute on function public.fin_financeiro_link_invest_profile(text), public.fin_financeiro_invest_positions(), public.fin_financeiro_invest_transactions()
   from public, anon;
-grant execute on function public.fam_link_invest_profile(text), public.fam_invest_positions(), public.fam_invest_transactions()
+grant execute on function public.fin_financeiro_link_invest_profile(text), public.fin_financeiro_invest_positions(), public.fin_financeiro_invest_transactions()
   to authenticated;

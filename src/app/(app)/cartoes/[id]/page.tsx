@@ -48,7 +48,7 @@ export default async function CardInvoicesPage({ params }: { params: Promise<{ i
         db.query<InvoiceEntry & { invoice_id: string }>(
           `select e.id, e.invoice_id, e.description, e.amount_cents, e.kind, e.occurred_on, e.installment_number, e.installment_total,
                   p.display_name as owner_name, e.visibility
-             from public.fam_entries e join public.fam_profiles p on p.id = e.owner_id
+             from public.fin_financeiro_entries e join public.fin_financeiro_profiles p on p.id = e.owner_id
             where e.invoice_id = any($1::uuid[]) order by e.occurred_on, e.created_at`,
           [invoices.map((i) => i.id)],
         ),

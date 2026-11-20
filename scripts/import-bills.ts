@@ -1,11 +1,11 @@
 /**
- * OPCIONAL — importa contas do antigo app "fincontrol" (tabelas bills/wallets) para fam_bills.
- * - Somente LÊ bills e wallets (SELECT); escreve apenas em fam_bills.
+ * OPCIONAL — importa contas do antigo app "fincontrol" (tabelas bills/wallets) para fin_financeiro_bills.
+ * - Somente LÊ bills e wallets (SELECT); escreve apenas em fin_financeiro_bills.
  * - Idempotente: external_id = "bills:<id>" + índice único (on conflict do nothing).
  * - Nunca roda automaticamente. Sem --apply é só simulação.
  *
  *   DATABASE_URL_ADMIN=... npx tsx scripts/import-bills.ts --source-user <auth uuid dono das bills> \
- *       --member <auth uuid do membro fam_> [--visibility compartilhado|pessoal] [--apply]
+ *       --member <auth uuid do membro fin_financeiro_> [--visibility compartilhado|pessoal] [--apply]
  */
 import pg from "pg";
 import { parseBoleto } from "../src/lib/domain/boleto";
@@ -53,8 +53,8 @@ async function main() {
   const c = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? undefined : { rejectUnauthorized: false } });
   await c.connect();
   try {
-    const hh = (await c.query("select household_id from public.fam_household_members where user_id = $1", [member])).rows[0]?.household_id;
-    if (!hh) throw new Error("membro não pertence a nenhuma família fam_");
+    const hh = (await c.query("select household_id from public.fin_financeiro_household_members where user_id = $1", [member])).rows[0]?.household_id;
+    if (!hh) throw new Error("membro não pertence a nenhuma família fin_financeiro_");
     const bills = (await c.query("select * from public.bills where user_id = $1", [sourceUser])).rows as Row[];
     const wallets = new Map<string, string>();
     try {
@@ -73,7 +73,7 @@ async function main() {
       ok++;
       if (!apply) continue;
       const r = await c.query(
-        `insert into public.fam_bills (household_id, owner_id, visibility, description, amount_cents, due_date, status, cost_type, pix_code, boleto_line, boleto_barcode, notes, source, external_id)
+        `insert into public.fin_financeiro_bills (household_id, owner_id, visibility, description, amount_cents, due_date, status, cost_type, pix_code, boleto_line, boleto_barcode, notes, source, external_id)
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'importacao',$13) on conflict (household_id, source, external_id) where external_id is not null do nothing`,
         [hh, member, visibility, m.description, m.amount, m.dueDate, m.status, m.costType, m.pixCode, m.boletoLine, m.boletoBarcode, m.notes, `bills:${b.id}`],
       );

@@ -1,8 +1,8 @@
 /**
  * Armazenamento de PDFs de fatura.
  *  - local: sistema de arquivos (.local/storage), usado no desenvolvimento;
- *  - supabase: bucket privado "fam_faturas" (criado manualmente). O acesso ao arquivo usa a
- *    service key SOMENTE no servidor e SEMPRE depois de a RLS confirmar (fam_invoice_documents)
+ *  - supabase: bucket privado "fin_financeiro_faturas" (criado manualmente). O acesso ao arquivo usa a
+ *    service key SOMENTE no servidor e SEMPRE depois de a RLS confirmar (fin_financeiro_invoice_documents)
  *    que o documento pertence ao usuário. O navegador nunca recebe chaves nem URLs públicas.
  * Caminho: <household_id>/<owner_id>/<sha256>.pdf
  */
@@ -12,7 +12,7 @@ import path from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { env } from "../env";
 
-export const BUCKET = "fam_faturas";
+export const BUCKET = "fin_financeiro_faturas";
 
 function safePath(p: string): string {
   if (!/^[0-9a-f-]{36}\/[0-9a-f-]{36}\/[0-9a-f]{64}\.(pdf|txt)$/.test(p)) throw new Error("caminho de arquivo inválido");
@@ -36,7 +36,7 @@ export async function putObject(p: string, bytes: Uint8Array, contentType: strin
     await fs.writeFile(f, bytes, { mode: 0o600 });
     return;
   }
-  // O bucket privado "fam_faturas" é criado MANUALMENTE no painel do Supabase (ver docs/ENTREGA.md):
+  // O bucket privado "fin_financeiro_faturas" é criado MANUALMENTE no painel do Supabase (ver docs/ENTREGA.md):
   // o app não cria nem altera buckets no projeto compartilhado.
   const { error } = await serviceClient().storage.from(BUCKET).upload(safePath(p), bytes, { contentType, upsert: true });
   if (error) throw new Error(/not found/i.test(error.message) ? `bucket privado "${BUCKET}" não existe — crie-o no painel do Supabase` : `falha no upload: ${error.message}`);

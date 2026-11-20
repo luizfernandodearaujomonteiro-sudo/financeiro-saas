@@ -7,7 +7,7 @@ import { seed } from "../../scripts/db/seed";
 export const testOpts = testClusterOptions();
 /** Superusuário — somente para criar o banco, migrar, fazer seed e inspecionar o catálogo. */
 export const testUrl = connectionString(testOpts);
-/** Papel do app (fam_app, NOINHERIT) — o mesmo que o app usa em produção. */
+/** Papel do app (fin_financeiro_app, NOINHERIT) — o mesmo que o app usa em produção. */
 export const testAppUrl = appConnectionString(testOpts);
 
 export async function freshTestDb(opts: { today?: string } = {}) {

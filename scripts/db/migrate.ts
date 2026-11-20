@@ -1,5 +1,5 @@
 /**
- * Aplica no banco LOCAL: (1) shim local do Supabase, (2) migrations fam_ de
+ * Aplica no banco LOCAL: (1) shim local do Supabase, (2) migrations fin_financeiro_ de
  * supabase/migrations (as mesmas que irão para produção), (3) stubs locais
  * das tabelas invest_* (somente local; nunca vão para o Supabase).
  */
@@ -53,9 +53,9 @@ export async function migrate(url: string, log: (m: string) => void = console.lo
         throw new Error(`falha em ${name}: ${(e as Error).message}`);
       }
     }
-    // senha LOCAL do papel fam_app (o shim cria o papel sem senha)
+    // senha LOCAL do papel fin_financeiro_app (o shim cria o papel sem senha)
     const pw = opts.appPassword ?? process.env.LOCAL_PG_APP_PASSWORD ?? "fam-app-local-dev";
-    await c.query(`alter role fam_app with login password '${pw.replace(/'/g, "''")}'`);
+    await c.query(`alter role fin_financeiro_app with login password '${pw.replace(/'/g, "''")}'`);
   } finally {
     await c.end();
   }

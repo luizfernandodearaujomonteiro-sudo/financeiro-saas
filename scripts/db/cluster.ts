@@ -15,7 +15,7 @@ export interface ClusterOptions {
   dataDir: string; // relativo à raiz do projeto
   port: number;
   password: string; // superusuário postgres: SOMENTE migrations/seed
-  appPassword: string; // papel fam_app (NOINHERIT): usado pelo app e pelos testes
+  appPassword: string; // papel fin_financeiro_app (NOINHERIT): usado pelo app e pelos testes
   database: string;
 }
 
@@ -38,9 +38,9 @@ export function connectionString(o: ClusterOptions): string {
   return `postgres://postgres:${encodeURIComponent(o.password)}@127.0.0.1:${o.port}/${o.database}`;
 }
 
-/** Papel do app (fam_app, NOINHERIT) — como em produção. */
+/** Papel do app (fin_financeiro_app, NOINHERIT) — como em produção. */
 export function appConnectionString(o: ClusterOptions): string {
-  return `postgres://fam_app:${encodeURIComponent(o.appPassword)}@127.0.0.1:${o.port}/${o.database}`;
+  return `postgres://fin_financeiro_app:${encodeURIComponent(o.appPassword)}@127.0.0.1:${o.port}/${o.database}`;
 }
 
 function binDir(): string {
