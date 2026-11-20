@@ -701,3 +701,4 @@ Geradas localmente com `npm run screenshots` (Playwright, banco local com seed):
 | Painel da esposa (tema claro) | ![claro](screenshots/15-painel-claro-esposa.png) |
 | Celular — painel | ![mobile](screenshots/16-mobile-painel.png) |
 | Celular — contas a pagar | ![mobile contas](screenshots/17-mobile-contas.png) |
+| Onboarding — "Criar minha família" | ![onboarding](screenshots/18-onboarding-criar-familia.png) |
