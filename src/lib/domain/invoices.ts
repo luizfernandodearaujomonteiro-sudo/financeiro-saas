@@ -25,7 +25,8 @@ export interface InvoiceSlot {
 }
 
 function validateCycle(card: CardCycle) {
-  for (const [k, v] of Object.entries(card)) {
+  for (const k of ["closingDay", "dueDay"] as const) {
+    const v = card[k];
     if (!Number.isInteger(v) || v < 1 || v > 31) throw new Error(`${k} inválido`);
   }
 }

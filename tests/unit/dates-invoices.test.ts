@@ -61,3 +61,10 @@ describe("atribuição de fatura pelo dia de fechamento", () => {
     expect(invoiceDisplayStatus({ ...inv, status: "paga" }, "2026-12-06")).toBe("paga");
   });
 });
+
+describe("ciclo do cartão com campos extras", () => {
+  it("aceita objeto de cartão com id e outros campos", () => {
+    const card = { id: "abc", nickname: "X", closingDay: 10, dueDay: 17 } as { closingDay: number; dueDay: number };
+    expect(assignInvoice(card, "2026-11-09").referenceMonth).toBe("2026-11-01");
+  });
+});

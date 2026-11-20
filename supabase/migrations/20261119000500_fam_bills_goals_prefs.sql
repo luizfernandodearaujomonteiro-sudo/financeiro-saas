@@ -130,7 +130,7 @@ create unique index if not exists fam_networth_unique
 -- ---------------------------------------------------------------------
 create table if not exists public.fam_profile_prefs (
   user_id          uuid primary key references public.fam_profiles (id) on delete cascade,
-  theme_mode       text not null default 'auto' check (theme_mode in ('dark', 'light', 'auto')),
+  theme_mode       text not null default 'dark' check (theme_mode in ('dark', 'light', 'auto')),
   auto_dark_start  smallint not null default 18 check (auto_dark_start between 0 and 23),
   auto_dark_end    smallint not null default 6 check (auto_dark_end between 0 and 23),
   comparison_mode  text not null default 'valores' check (comparison_mode in ('valores', 'percentuais')),
