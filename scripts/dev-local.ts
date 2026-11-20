@@ -12,7 +12,7 @@ async function main() {
   const url = connectionString(o);
   const started = start(o);
   await ensureDatabase(url, o.database);
-  await migrate(url, () => {});
+  await migrate(url, () => {}, { appPassword: o.appPassword });
   const c = new pg.Client({ connectionString: url });
   await c.connect();
   const n = (await c.query("select count(*)::int n from public.fam_households")).rows[0].n;

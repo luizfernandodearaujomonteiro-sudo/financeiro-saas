@@ -1,9 +1,9 @@
 // Ambiente do teste ponta a ponta (somente local; nenhum serviço externo é chamado).
 import { randomBytes } from "node:crypto";
-import { testUrl } from "../support/db";
+import { testAppUrl } from "../support/db";
 
 Object.assign(process.env, {
-  DATABASE_URL: testUrl,
+  DATABASE_URL: testAppUrl, // conecta como fam_app (NOINHERIT), igual à produção
   LOCAL_DEV_AUTH: "true",
   APP_URL: "http://localhost:3999",
   LOCAL_SESSION_SECRET: "e2e-session-secret-0123456789abcdef",

@@ -25,7 +25,7 @@ async function main() {
       start(o);
       await ensureDatabase(url, o.database);
       console.log("Aplicando migrations no banco LOCAL:");
-      await migrate(url);
+      await migrate(url, console.log, { appPassword: o.appPassword });
       break;
     case "seed":
       await seed(url);
@@ -34,7 +34,7 @@ async function main() {
       destroy(o);
       start(o);
       await ensureDatabase(url, o.database);
-      await migrate(url);
+      await migrate(url, console.log, { appPassword: o.appPassword });
       await seed(url);
       break;
     case "url":

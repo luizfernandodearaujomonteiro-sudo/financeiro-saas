@@ -14,7 +14,8 @@ export const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname)
 export interface ClusterOptions {
   dataDir: string; // relativo à raiz do projeto
   port: number;
-  password: string;
+  password: string; // superusuário postgres: SOMENTE migrations/seed
+  appPassword: string; // papel fam_app (NOINHERIT): usado pelo app e pelos testes
   database: string;
 }
 
@@ -23,16 +24,23 @@ export function devClusterOptions(): ClusterOptions {
     dataDir: process.env.LOCAL_PG_DATA_DIR ?? ".local/pgdata",
     port: Number(process.env.LOCAL_PG_PORT ?? 54329),
     password: process.env.LOCAL_PG_PASSWORD ?? "fam-local-dev",
+    appPassword: process.env.LOCAL_PG_APP_PASSWORD ?? "fam-app-local-dev",
     database: process.env.LOCAL_PG_DATABASE ?? "financeiro",
   };
 }
 
 export function testClusterOptions(): ClusterOptions {
-  return { dataDir: ".local/pgdata-test", port: Number(process.env.TEST_PG_PORT ?? 54330), password: "fam-local-test", database: "financeiro_test" };
+  return { dataDir: ".local/pgdata-test", port: Number(process.env.TEST_PG_PORT ?? 54330), password: "fam-local-test", appPassword: "fam-app-local-test", database: "financeiro_test" };
 }
 
+/** Superusuário: somente para migrations/seed. */
 export function connectionString(o: ClusterOptions): string {
   return `postgres://postgres:${encodeURIComponent(o.password)}@127.0.0.1:${o.port}/${o.database}`;
+}
+
+/** Papel do app (fam_app, NOINHERIT) — como em produção. */
+export function appConnectionString(o: ClusterOptions): string {
+  return `postgres://fam_app:${encodeURIComponent(o.appPassword)}@127.0.0.1:${o.port}/${o.database}`;
 }
 
 function binDir(): string {

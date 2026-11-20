@@ -5,7 +5,13 @@
  *   `request.jwt.claims` = { sub: userId, role: "authenticated" } — o mesmo
  *   mecanismo do PostgREST/Supabase. TODAS as políticas RLS se aplicam.
  * - withAnon(): papel anon (apenas RPCs liberadas, ex.: limite de login).
- * - withService(): SOMENTE para jobs (cron) e webhooks; sem troca de papel.
+ * - withService(): SOMENTE para jobs (cron), webhooks e log de mensagens:
+ *   `SET LOCAL ROLE service_role` (só DML; ignora RLS). Atenção: no Supabase o
+ *   service_role também alcança tabelas de outros apps do projeto (limitação
+ *   conhecida, ver docs/ENTREGA.md) — por isso o uso é restrito e auditado.
+ *
+ * A conexão (DATABASE_URL) usa o papel fam_app (NOINHERIT): sem SET ROLE ele não
+ * tem privilégio algum; nunca use o papel postgres no app.
  *
  * O userId passado para withUser SEMPRE vem da sessão validada no servidor
  * (Supabase Auth ou sessão local assinada), nunca do navegador.
@@ -73,7 +79,10 @@ export function withAnon<T>(fn: (db: Db) => Promise<T>): Promise<T> {
   }, fn);
 }
 
-/** Somente jobs/webhooks. Nunca use em rotas acionadas pelo navegador. */
+/** Somente jobs/webhooks/log de mensagens. Nunca para ler dados em rotas do navegador. */
 export function withService<T>(fn: (db: Db) => Promise<T>): Promise<T> {
-  return tx(async () => {}, fn);
+  return tx(async (c) => {
+    await c.query("set local role service_role");
+    await c.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ role: "service_role" })]);
+  }, fn);
 }

@@ -1,11 +1,14 @@
 /** Banco de TESTE local (porta 54330, .local/pgdata-test). Recriado do zero por arquivo de teste. */
 import pg from "pg";
-import { connectionString, start, testClusterOptions } from "../../scripts/db/cluster";
+import { appConnectionString, connectionString, start, testClusterOptions } from "../../scripts/db/cluster";
 import { migrate } from "../../scripts/db/migrate";
 import { seed } from "../../scripts/db/seed";
 
 export const testOpts = testClusterOptions();
+/** Superusuário — somente para criar o banco, migrar, fazer seed e inspecionar o catálogo. */
 export const testUrl = connectionString(testOpts);
+/** Papel do app (fam_app, NOINHERIT) — o mesmo que o app usa em produção. */
+export const testAppUrl = appConnectionString(testOpts);
 
 export async function freshTestDb(opts: { today?: string } = {}) {
   start(testOpts);
@@ -16,9 +19,9 @@ export async function freshTestDb(opts: { today?: string } = {}) {
   await c.query(`drop database if exists ${testOpts.database} with (force)`);
   await c.query(`create database ${testOpts.database}`);
   await c.end();
-  await migrate(testUrl, () => {});
+  await migrate(testUrl, () => {}, { appPassword: testOpts.appPassword });
   const s = await seed(testUrl, { quiet: true, today: opts.today });
-  return { url: testUrl, ...s };
+  return { url: testUrl, appUrl: testAppUrl, ...s };
 }
 
 /** Executa como um usuário autenticado (mesmo mecanismo do app/PostgREST). */

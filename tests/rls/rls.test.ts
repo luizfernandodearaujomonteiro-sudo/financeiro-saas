@@ -8,7 +8,8 @@ import { SEED_USERS } from "../../scripts/db/seed";
 import { asUser, freshTestDb } from "../support/db";
 
 const { luiz, esposa, outro } = SEED_USERS;
-let pool: pg.Pool;
+let pool: pg.Pool; // superusuário: catálogo e preparação de dados
+let app: pg.Pool; // fam_app (NOINHERIT): todas as consultas "como usuário"
 let householdId: string;
 let itau: string;
 let nubank: string;
@@ -19,13 +20,62 @@ beforeAll(async () => {
   itau = db.itau;
   nubank = db.nubank;
   pool = new pg.Pool({ connectionString: db.url, max: 4 });
+  app = new pg.Pool({ connectionString: db.appUrl, max: 4 });
 });
 afterAll(async () => {
   await pool?.end();
+  await app?.end();
 });
 
 const count = async (userId: string | null, sql: string, params: unknown[] = []) =>
-  asUser(pool, userId, async (c) => Number((await c.query(`select count(*)::int as n from (${sql}) x`, params)).rows[0].n));
+  asUser(app, userId, async (c) => Number((await c.query(`select count(*)::int as n from (${sql}) x`, params)).rows[0].n));
+
+describe("papel de conexão do app (fam_app NOINHERIT)", () => {
+  it("conectado como fam_app, sem SET ROLE, não lê nenhuma tabela fam_ nem auth.users", async () => {
+    const c = await app.connect();
+    try {
+      expect((await c.query("select current_user as u")).rows[0].u).toBe("fam_app");
+      await expect(c.query("select * from fam_entries limit 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("select * from fam_households limit 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("select * from auth.users limit 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("select fam_private.fam_login_failures($1, 60)", ["a".repeat(64)])).rejects.toThrow(/permission denied/);
+    } finally {
+      c.release();
+    }
+  });
+  it("fam_app não executa DDL nem como service_role; service_role só faz DML", async () => {
+    const c = await app.connect();
+    try {
+      await expect(c.query("create table public.fam_hack (id int)")).rejects.toThrow(/permission denied/);
+      await c.query("begin");
+      await c.query("set local role service_role");
+      expect((await c.query("select count(*)::int n from fam_entries")).rows[0].n).toBeGreaterThan(0); // ignora RLS (jobs)
+      await expect(c.query("create table public.fam_hack (id int)")).rejects.toThrow(/permission denied/);
+      await c.query("rollback");
+      await c.query("begin");
+      await c.query("set local role service_role");
+      await expect(c.query("alter table public.fam_entries add column x int")).rejects.toThrow(/must be owner|permission denied/);
+      await c.query("rollback");
+    } finally {
+      c.release();
+    }
+  });
+  it("fam_app não é superusuário, não cria papéis nem bancos", async () => {
+    const r = await pool.query("select rolsuper, rolinherit, rolcreaterole, rolcreatedb, rolbypassrls from pg_roles where rolname = 'fam_app'");
+    expect(r.rows[0]).toEqual({ rolsuper: false, rolinherit: false, rolcreaterole: false, rolcreatedb: false, rolbypassrls: false });
+  });
+});
+
+describe("RPCs de login e convite fora do schema exposto", () => {
+  it("fam_login_failures, fam_record_login_attempt e fam_invite_info ficam só em fam_private", async () => {
+    const r = await pool.query(`select n.nspname, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where p.proname in ('fam_login_failures','fam_record_login_attempt','fam_invite_info') order by 2`);
+    expect(r.rows.every((x) => x.nspname === "fam_private")).toBe(true);
+    expect(r.rows).toHaveLength(3);
+    const pub = await pool.query("select has_schema_privilege('public', 'fam_private', 'USAGE') as ok");
+    expect(pub.rows[0].ok).toBe(false);
+  });
+});
 
 describe("cobertura de RLS", () => {
   it("TODAS as tabelas fam_ têm RLS habilitado e nenhum privilégio para anon", async () => {
@@ -59,20 +109,20 @@ describe("lançamentos: pessoal x compartilhado", () => {
     expect(visible).toBeLessThan(total.rows[0].n);
   });
   it("um membro não altera nem apaga lançamento compartilhado do outro", async () => {
-    const upd = await asUser(pool, esposa.id, (c) => c.query("update fam_entries set amount_cents = 1 where owner_id = $1 and visibility = 'compartilhado'", [luiz.id]));
+    const upd = await asUser(app, esposa.id, (c) => c.query("update fam_entries set amount_cents = 1 where owner_id = $1 and visibility = 'compartilhado'", [luiz.id]));
     expect(upd.rowCount).toBe(0);
-    const del = await asUser(pool, esposa.id, (c) => c.query("delete from fam_entries where owner_id = $1", [luiz.id]));
+    const del = await asUser(app, esposa.id, (c) => c.query("delete from fam_entries where owner_id = $1", [luiz.id]));
     expect(del.rowCount).toBe(0);
   });
   it("não é possível inserir lançamento em nome de outra pessoa", async () => {
-    await expect(asUser(pool, esposa.id, (c) => c.query(
+    await expect(asUser(app, esposa.id, (c) => c.query(
       "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
       [householdId, luiz.id]))).rejects.toThrow(/row-level security/);
   });
   it("não é possível tornar pessoal (ou alterar) o lançamento de outra pessoa trocando o dono", async () => {
-    const r = await asUser(pool, esposa.id, (c) => c.query("update fam_entries set owner_id = $1 where owner_id = $1", [esposa.id]));
+    const r = await asUser(app, esposa.id, (c) => c.query("update fam_entries set owner_id = $1 where owner_id = $1", [esposa.id]));
     expect(r.rowCount).toBeGreaterThan(0); // os próprios: ok
-    await expect(asUser(pool, esposa.id, (c) => c.query("update fam_entries set owner_id = $2 where owner_id = $1", [esposa.id, luiz.id]))).rejects.toThrow(/row-level security/);
+    await expect(asUser(app, esposa.id, (c) => c.query("update fam_entries set owner_id = $2 where owner_id = $1", [esposa.id, luiz.id]))).rejects.toThrow(/row-level security/);
   });
 });
 
@@ -83,10 +133,10 @@ describe("usuário do auth.users compartilhado que NÃO é membro", () => {
     expect(await count(outro.id, `select 1 from ${t}`)).toBe(0);
   });
   it("não consegue inserir dados na família de outra pessoa", async () => {
-    await expect(asUser(pool, outro.id, (c) => c.query(
+    await expect(asUser(app, outro.id, (c) => c.query(
       "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01')",
       [householdId, outro.id]))).rejects.toThrow();
-    await expect(asUser(pool, outro.id, (c) => c.query("insert into fam_categories (household_id, name, kind) values ($1, 'Hack', 'despesa')", [householdId]))).rejects.toThrow(/row-level security/);
+    await expect(asUser(app, outro.id, (c) => c.query("insert into fam_categories (household_id, name, kind) values ($1, 'Hack', 'despesa')", [householdId]))).rejects.toThrow(/row-level security/);
   });
   it("RPCs de investimentos não devolvem nada", async () => {
     expect(await count(outro.id, "select * from fam_invest_positions()")).toBe(0);
@@ -105,13 +155,13 @@ describe("cadastro (signup) não concede nada", () => {
     expect((await pool.query("select count(*)::int n from fam_household_members where user_id = $1", [novo])).rows[0].n).toBe(0);
   });
   it("o usuário novo não consegue se colocar em uma família nem criar família", async () => {
-    await expect(asUser(pool, novo, (c) => c.query("insert into fam_household_members (household_id, user_id, role) values ($1, $2, 'owner')", [householdId, novo]))).rejects.toThrow(/permission denied/);
-    await expect(asUser(pool, novo, (c) => c.query("insert into fam_households (name) values ('minha')"))).rejects.toThrow(/permission denied/);
-    await expect(asUser(pool, novo, (c) => c.query("insert into fam_profiles (id, display_name) values ($1, 'x')", [novo]))).rejects.toThrow(/permission denied/);
-    await expect(asUser(pool, novo, (c) => c.query("select fam_bootstrap_household($1, 'x', 'y')", [novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fam_household_members (household_id, user_id, role) values ($1, $2, 'owner')", [householdId, novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fam_households (name) values ('minha')"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("insert into fam_profiles (id, display_name) values ($1, 'x')", [novo]))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, novo, (c) => c.query("select fam_bootstrap_household($1, 'x', 'y')", [novo]))).rejects.toThrow(/permission denied/);
   });
   it("convite inválido não dá acesso", async () => {
-    await expect(asUser(pool, novo, (c) => c.query("select fam_accept_invite('token-falso', 'Novo')"))).rejects.toThrow(/convite inválido/);
+    await expect(asUser(app, novo, (c) => c.query("select fam_accept_invite('token-falso', 'Novo')"))).rejects.toThrow(/convite inválido/);
   });
 });
 
@@ -123,24 +173,24 @@ describe("convites (fluxo explícito)", () => {
     await pool.query("select fam_bootstrap_household($1, 'Outra família', 'Dono 2')", [dono2]);
   });
   it("só o dono cria convite; família com 2 membros não aceita mais convites", async () => {
-    await expect(asUser(pool, esposa.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/apenas o dono/);
-    await expect(asUser(pool, luiz.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/2 membros/);
-    token = (await asUser(pool, dono2, (c) => c.query("select fam_create_invite() as t"))).rows[0].t;
+    await expect(asUser(app, esposa.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/apenas o dono/);
+    await expect(asUser(app, luiz.id, (c) => c.query("select fam_create_invite()"))).rejects.toThrow(/2 membros/);
+    token = (await asUser(app, dono2, (c) => c.query("select fam_create_invite() as t"))).rows[0].t;
     expect(token).toMatch(/^[0-9a-f]{64}$/);
     // o banco guarda só o hash
     expect((await pool.query("select count(*)::int n from fam_household_invites where token_hash = $1", [token])).rows[0].n).toBe(0);
   });
   it("aceitar convite cria membro 'member'; não dá para reutilizar", async () => {
-    expect((await asUser(pool, null, (c) => c.query("select fam_invite_info($1) as n", [token]), "anon")).rows[0].n).toBe("Outra família");
-    await asUser(pool, convidado, (c) => c.query("select fam_accept_invite($1, 'Convidada')", [token]));
-    const role = await asUser(pool, convidado, (c) => c.query("select role from fam_household_members where user_id = auth.uid()"));
+    expect((await asUser(app, null, (c) => c.query("select fam_private.fam_invite_info($1) as n", [token]), "anon")).rows[0].n).toBe("Outra família");
+    await asUser(app, convidado, (c) => c.query("select fam_accept_invite($1, 'Convidada')", [token]));
+    const role = await asUser(app, convidado, (c) => c.query("select role from fam_household_members where user_id = auth.uid()"));
     expect(role.rows[0].role).toBe("member");
-    await expect(asUser(pool, terceiro, (c) => c.query("select fam_accept_invite($1, 'X')", [token]))).rejects.toThrow(/convite inválido/);
+    await expect(asUser(app, terceiro, (c) => c.query("select fam_accept_invite($1, 'X')", [token]))).rejects.toThrow(/convite inválido/);
     // a nova família não enxerga a família do Luiz
     expect(await count(convidado, "select 1 from fam_entries where household_id = $1", [householdId])).toBe(0);
   });
   it("membro não altera o próprio papel", async () => {
-    await expect(asUser(pool, convidado, (c) => c.query("update fam_household_members set role = 'owner' where user_id = auth.uid()"))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, convidado, (c) => c.query("update fam_household_members set role = 'owner' where user_id = auth.uid()"))).rejects.toThrow(/permission denied/);
   });
 });
 
@@ -152,13 +202,13 @@ describe("cartões, faturas e contas", () => {
     expect(await count(esposa.id, "select 1 from fam_invoices where card_id = $1", [nubank])).toBeGreaterThan(0);
   });
   it("Luiz não lança compra no cartão pessoal da esposa (trigger)", async () => {
-    await expect(asUser(pool, luiz.id, (c) => c.query(
+    await expect(asUser(app, luiz.id, (c) => c.query(
       "insert into fam_entries (household_id, owner_id, kind, description, amount_cents, occurred_on, budget_month, payment_method, card_id) values ($1,$2,'despesa','x',100,'2026-11-01','2026-11-01','cartao_credito',$3)",
       [householdId, luiz.id, itau]))).rejects.toThrow(/cartão não disponível/);
   });
   it("total da fatura não pode ser alterado pelo usuário (só pelo trigger)", async () => {
-    await expect(asUser(pool, luiz.id, (c) => c.query("update fam_invoices set total_cents = 0 where card_id = $1", [nubank]))).rejects.toThrow(/permission denied/);
-    const ok = await asUser(pool, luiz.id, (c) => c.query("update fam_invoices set status = 'paga' where card_id = $1 and status = 'aberta' returning id", [nubank]));
+    await expect(asUser(app, luiz.id, (c) => c.query("update fam_invoices set total_cents = 0 where card_id = $1", [nubank]))).rejects.toThrow(/permission denied/);
+    const ok = await asUser(app, luiz.id, (c) => c.query("update fam_invoices set status = 'paga' where card_id = $1 and status = 'aberta' returning id", [nubank]));
     expect(ok.rowCount).toBeGreaterThanOrEqual(0);
   });
   it("trigger mantém o total da fatura igual à soma das parcelas", async () => {
@@ -179,24 +229,24 @@ describe("cartões, faturas e contas", () => {
 
 describe("segredos e tabelas internas", () => {
   it.each(["fam_oauth_tokens", "fam_whatsapp_secrets", "fam_login_attempts", "fam_whatsapp_inbound", "fam_notification_log"])("%s é inacessível para usuários", async (t) => {
-    await expect(asUser(pool, luiz.id, (c) => c.query(`select * from ${t}`))).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, luiz.id, (c) => c.query(`select * from ${t}`))).rejects.toThrow(/permission denied/);
   });
   it("só o dono lê os segredos cifrados do WhatsApp via RPC", async () => {
-    await expect(asUser(pool, esposa.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"))).rejects.toThrow(/apenas o dono/);
-    await asUser(pool, luiz.id, (c) => c.query("select fam_set_whatsapp_secrets('v1.cifrado', null)"));
-    const r = await asUser(pool, luiz.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"));
+    await expect(asUser(app, esposa.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"))).rejects.toThrow(/apenas o dono/);
+    await asUser(app, luiz.id, (c) => c.query("select fam_set_whatsapp_secrets('v1.cifrado', null)"));
+    const r = await asUser(app, luiz.id, (c) => c.query("select * from fam_get_whatsapp_secrets()"));
     expect(r.rows[0].evolution_token_enc).toBe("v1.cifrado");
   });
   it("membro define o próprio telefone; só o dono define o de outro", async () => {
-    await expect(asUser(pool, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511911112222')", [luiz.id]))).rejects.toThrow(/apenas o dono/);
-    await asUser(pool, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511990000002')", [esposa.id]));
+    await expect(asUser(app, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511911112222')", [luiz.id]))).rejects.toThrow(/apenas o dono/);
+    await asUser(app, esposa.id, (c) => c.query("select fam_set_member_phone($1, '+5511990000002')", [esposa.id]));
   });
   it("limite de login: anon só acessa via RPC", async () => {
     const key = "a".repeat(64);
-    await asUser(pool, null, (c) => c.query("select fam_record_login_attempt($1, false)", [key]), "anon");
-    const n = await asUser(pool, null, (c) => c.query("select fam_login_failures($1, 900) as n", [key]), "anon");
+    await asUser(app, null, (c) => c.query("select fam_private.fam_record_login_attempt($1, false)", [key]), "anon");
+    const n = await asUser(app, null, (c) => c.query("select fam_private.fam_login_failures($1, 900) as n", [key]), "anon");
     expect(n.rows[0].n).toBe(1);
-    await expect(asUser(pool, null, (c) => c.query("select * from fam_login_attempts"), "anon")).rejects.toThrow(/permission denied/);
+    await expect(asUser(app, null, (c) => c.query("select * from fam_login_attempts"), "anon")).rejects.toThrow(/permission denied/);
   });
 });
 
@@ -206,13 +256,13 @@ describe("investimentos (ponte somente leitura para invest_*)", () => {
     expect(await count(esposa.id, "select 1 from invest_holdings")).toBe(0);
   });
   it("quando o Luiz deixa pessoal, a esposa deixa de ver", async () => {
-    await asUser(pool, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'pessoal' where user_id = auth.uid()"));
+    await asUser(app, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'pessoal' where user_id = auth.uid()"));
     expect(await count(esposa.id, "select * from fam_invest_positions()")).toBe(0);
     expect(await count(luiz.id, "select * from fam_invest_positions()")).toBe(4);
-    await asUser(pool, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'compartilhado' where user_id = auth.uid()"));
+    await asUser(app, luiz.id, (c) => c.query("update fam_invest_links set visibility = 'compartilhado' where user_id = auth.uid()"));
   });
   it("vincular perfil de investimentos só funciona para o próprio login", async () => {
-    const r = await asUser(pool, esposa.id, (c) => c.query("select fam_link_invest_profile('pessoal') as ok"));
+    const r = await asUser(app, esposa.id, (c) => c.query("select fam_link_invest_profile('pessoal') as ok"));
     expect(r.rows[0].ok).toBe(false); // esposa não tem invest_profile
   });
 });

@@ -4,7 +4,7 @@
  * - Idempotente: external_id = "bills:<id>" + índice único (on conflict do nothing).
  * - Nunca roda automaticamente. Sem --apply é só simulação.
  *
- *   DATABASE_URL=... npx tsx scripts/import-bills.ts --source-user <auth uuid dono das bills> \
+ *   DATABASE_URL_ADMIN=... npx tsx scripts/import-bills.ts --source-user <auth uuid dono das bills> \
  *       --member <auth uuid do membro fam_> [--visibility compartilhado|pessoal] [--apply]
  */
 import pg from "pg";
@@ -45,11 +45,11 @@ export function mapBill(b: Row, walletName: string | null) {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL_ADMIN; // papel administrativo, só para este script (nunca na Vercel)
   const sourceUser = arg("source-user"), member = arg("member");
   const visibility = arg("visibility") === "pessoal" ? "pessoal" : "compartilhado";
   const apply = process.argv.includes("--apply");
-  if (!url || !sourceUser || !member) throw new Error("uso: DATABASE_URL=... tsx scripts/import-bills.ts --source-user <uuid> --member <uuid> [--apply]");
+  if (!url || !sourceUser || !member) throw new Error("uso: DATABASE_URL_ADMIN=... tsx scripts/import-bills.ts --source-user <uuid> --member <uuid> [--apply]");
   const c = new pg.Client({ connectionString: url, ssl: /localhost|127\.0\.0\.1/.test(url) ? undefined : { rejectUnauthorized: false } });
   await c.connect();
   try {

@@ -3,7 +3,7 @@
  * via as funções fam_bootstrap_household / fam_bootstrap_add_member.
  * As contas precisam existir no auth.users (crie no painel do Supabase Auth ou use contas existentes).
  *
- *   DATABASE_URL=... npx tsx scripts/bootstrap.ts --owner-email luiz@... --owner-name Luiz \
+ *   DATABASE_URL_ADMIN=... npx tsx scripts/bootstrap.ts --owner-email luiz@... --owner-name Luiz \
  *       --household "Família do Luiz" [--member-email esposa@... --member-name "Nome"] [--yes]
  * Sem --yes apenas mostra o que faria (dry-run).
  */
@@ -15,8 +15,8 @@ function arg(name: string): string | undefined {
 }
 
 async function main() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("Defina DATABASE_URL");
+  const url = process.env.DATABASE_URL_ADMIN; // papel administrativo, só para este script (nunca na Vercel)
+  if (!url) throw new Error("Defina DATABASE_URL_ADMIN (conexão administrativa, usada só neste script)");
   const ownerEmail = arg("owner-email"), ownerName = arg("owner-name") ?? "Dono", household = arg("household") ?? "Nossa família";
   const memberEmail = arg("member-email"), memberName = arg("member-name") ?? "Membro";
   const apply = process.argv.includes("--yes");

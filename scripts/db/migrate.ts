@@ -26,7 +26,7 @@ function sqlFiles(dir: string): string[] {
   return fs.readdirSync(full).filter((f) => f.endsWith(".sql")).sort().map((f) => path.join(full, f));
 }
 
-export async function migrate(url: string, log: (m: string) => void = console.log) {
+export async function migrate(url: string, log: (m: string) => void = console.log, opts: { appPassword?: string } = {}) {
   const c = new pg.Client({ connectionString: url });
   await c.connect();
   try {
@@ -53,6 +53,9 @@ export async function migrate(url: string, log: (m: string) => void = console.lo
         throw new Error(`falha em ${name}: ${(e as Error).message}`);
       }
     }
+    // senha LOCAL do papel fam_app (o shim cria o papel sem senha)
+    const pw = opts.appPassword ?? process.env.LOCAL_PG_APP_PASSWORD ?? "fam-app-local-dev";
+    await c.query(`alter role fam_app with login password '${pw.replace(/'/g, "''")}'`);
   } finally {
     await c.end();
   }
