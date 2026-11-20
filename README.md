@@ -43,7 +43,7 @@ Comandos úteis:
 | `npm run db:local:seed` / `db:local:reset` | dados de demonstração / recria tudo do zero |
 | `npm run setup:local` | gera `.env.local` com segredos aleatórios (não sobrescreve) |
 | `npm run typecheck` · `npm run lint` · `npm run build` | verificações |
-| `npm test` | 68 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos…) |
+| `npm test` | 92 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos, redirect…) |
 | `npm run test:rls` | 56 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fam_app` |
 | `npm run test:e2e` | 31 testes ponta a ponta locais (login, cartões, revisão, Pluggy mock, WhatsApp…), como `fam_app` |
 | `npm run screenshots` | fumaça no navegador (Playwright) + capturas em `docs/screenshots/` (requer `npm run build`; `npx playwright install chromium` uma vez) |

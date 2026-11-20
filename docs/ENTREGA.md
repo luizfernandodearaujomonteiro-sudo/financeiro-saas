@@ -10,7 +10,7 @@ Branch: `rewrite/familia-nextjs` (nada foi enviado ao remoto; `main` não foi al
 
 ## Sumário
 
-0. [Revisão 1 — o que mudou](#0-revisão-1--o-que-mudou)
+0. [Revisões 1 e 2 — o que mudou](#0-revisão-1--o-que-mudou)
 
 1. [O que foi feito](#1-o-que-foi-feito)
 2. [Como rodar localmente](#2-como-rodar-localmente)
@@ -51,7 +51,14 @@ Migrations: as `fam_` existentes foram editadas (ainda não aplicadas em lugar n
 `20261120000700_fam_pdf_password_invoice_dates.sql`. Continua tudo aditivo e só com objetos `fam_`
 (mais o schema novo `fam_private`).
 
-### Limitações conhecidas (após a revisão 1)
+### Revisão 2
+
+| # | Achado | Correção |
+|---|---|---|
+| 1 | Open redirect no destino pós-login: `next.startsWith("/") && !next.startsWith("//")` aceitava `/\evil.com` (o navegador trata como `//evil.com`) | `safeNextPath()` (`src/lib/security/redirect.ts`) só aceita caminhos internos que casem com `/^\/(?![\/\\])[A-Za-z0-9\-._~\/?=&%]*$/` e confere também a forma decodificada (rejeita `/%5Cevil.com`, `/%2F%2Fevil.com`, caracteres de controle e esquemas). Fallback `/painel`. É o único ponto do app que redireciona a partir de parâmetro do usuário. Testes com `/\evil.com`, `//evil.com`, `/%5Cevil.com`, `https://evil.com` (rejeitados) e `/painel?x=1` (aceito). |
+| 2 | Classificador: qualquer "aplicação"/"resgate" virava transferência ("RESGATE PREMIO", "APLICACAO MULTA"); prefixo de adquirente podia virar pagamento de fatura | Aplicação/resgate exige o produto (cdb, rdb, poupança, lci, lca, fundo, tesouro, automática/aut) **ou** categoria Pluggy de investimento. Descrições com prefixo de adquirente (`PAG*JoseDaSilva`, `PG *LOJA`, `MP*…`) nunca são pagamento de fatura (nem pela categoria). No cartão, "pagamento" no início só conta com recebido/efetuado/obrigado/fatura ou sozinho. Testes unitários. |
+
+### Limitações conhecidas (após as revisões 1 e 2)
 - **`service_role` no Supabase alcança as outras tabelas do projeto** (tem `BYPASSRLS` e os
   privilégios padrão do Supabase). O app só assume esse papel em crons, webhooks e no log de
   mensagens enviadas; requisições do painel usam `authenticated` (RLS). Ele não é dono das tabelas,
@@ -229,7 +236,7 @@ Números desconhecidos não recebem resposta nem dados.
 ```bash
 npm run typecheck
 npm run lint
-npm test             # 68 testes unitários
+npm test             # 92 testes unitários
 npm run test:rls     # 56 testes de RLS no Postgres local real (porta 54330, recriado do zero; conecta como fam_app)
 npm run test:e2e     # 31 testes ponta a ponta locais (conecta como fam_app)
 npm run build
