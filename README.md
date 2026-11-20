@@ -43,9 +43,9 @@ Comandos úteis:
 | `npm run db:local:seed` / `db:local:reset` | dados de demonstração / recria tudo do zero |
 | `npm run setup:local` | gera `.env.local` com segredos aleatórios (não sobrescreve) |
 | `npm run typecheck` · `npm run lint` · `npm run build` | verificações |
-| `npm test` | 92 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos, redirect…) |
-| `npm run test:rls` | 56 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fin_financeiro_app` |
-| `npm run test:e2e` | 31 testes ponta a ponta locais (login, cartões, revisão, Pluggy mock, WhatsApp…), como `fin_financeiro_app` |
+| `npm test` | 97 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos, redirect…) |
+| `npm run test:rls` | 60 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fin_financeiro_app` |
+| `npm run test:e2e` | 33 testes ponta a ponta locais (login, onboarding, cartões, revisão, Pluggy mock, WhatsApp…), como `fin_financeiro_app` |
 | `npm run screenshots` | fumaça no navegador (Playwright) + capturas em `docs/screenshots/` (requer `npm run build`; `npx playwright install chromium` uma vez) |
 | `npm run check` | typecheck + lint + todos os testes + build |
 
@@ -53,22 +53,26 @@ Comandos úteis:
 
 Resumo — detalhes e alertas em [docs/ENTREGA.md › Go-live](docs/ENTREGA.md#go-live-supabase--vercel):
 
-1. **Revise** os SQL de `supabase/migrations/` (7 arquivos; somente `fin_financeiro_` + schema `fin_financeiro_private`,
-   aditivos) e aplique no projeto `bqbmvurwmsgitundbdxt` pelo SQL Editor (um arquivo por vez, em
-   ordem) — é um **banco de produção compartilhado** com outros apps.
+1. **Revise** os SQL de `supabase/migrations/` (8 arquivos; somente `fin_financeiro_*` + schema
+   `fin_financeiro_private`, aditivos; não tocam nas tabelas reservadas do app antigo
+   `fin_financeiro_categorias/_configuracoes/_empresas/_lancamentos/_usuarios`) e aplique no projeto
+   `bqbmvurwmsgitundbdxt` pelo SQL Editor (um arquivo por vez, em ordem) — é um **banco de produção
+   compartilhado** com outros apps.
 2. Crie o papel de conexão do app com `supabase/manual/fin_financeiro_app_role.sql` (troque a senha
    placeholder na hora; não commite).
-3. Crie no Storage o bucket **privado** `fin_financeiro_faturas`.
-4. Crie a família: `DATABASE_URL_ADMIN=... npm run bootstrap -- --owner-email ... --member-email ... --yes`.
-5. Na Vercel, cadastre as variáveis de `.env.example` — `DATABASE_URL` com o papel **`fin_financeiro_app`**
-   no pooler (porta 6543); nunca `DATABASE_URL_ADMIN` nem `LOCAL_DEV_AUTH` — faça o deploy e
-   confira os crons.
-6. Configure os webhooks (WhatsApp/Evolution; Pluggy com header `x-webhook-secret`) e o OAuth do Google.
+3. Na Vercel, cadastre as variáveis de `.env.example` — `DATABASE_URL` com o papel
+   **`fin_financeiro_app`** no pooler em modo transaction (porta 6543); nunca `DATABASE_URL_ADMIN`
+   nem `LOCAL_DEV_AUTH`. `SUPABASE_SERVICE_ROLE_KEY` é opcional (só upload de PDF; bucket privado
+   `fin_financeiro_faturas`). Faça o deploy e confira os crons.
+4. O Luiz entra no painel e usa **"Criar minha família"**; depois convida a esposa em
+   Configurações › Família (alternativa: `npm run bootstrap` com `DATABASE_URL_ADMIN`).
+5. Configure os webhooks (WhatsApp/Evolution; Pluggy com header `x-webhook-secret`) e o OAuth do Google.
 
 ## Segurança (resumo)
 
 - **RLS em todas as tabelas `fin_financeiro_`**, por pertencimento (`fin_financeiro_household_members`). O `auth.users`
-  é compartilhado com outros apps: **cadastro não concede nada**; vínculo só por convite/bootstrap.
+  é compartilhado com outros apps: **cadastro não concede nada**; vínculo só por convite, bootstrap
+  ou pelo onboarding explícito "Criar minha família" (cria a família DO usuário, sem acesso a outras).
 - O app conecta com o papel dedicado **`fin_financeiro_app` (NOINHERIT)**: sem `SET ROLE` ele não tem
   privilégio. Cada requisição do painel roda como `authenticated` com o `sub` do usuário (o mesmo
   mecanismo do PostgREST) → a RLS vale também no servidor. `service_role` (só DML) apenas em

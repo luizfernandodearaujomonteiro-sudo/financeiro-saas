@@ -10,7 +10,7 @@ Branch: `rewrite/familia-nextjs` (nada foi enviado ao remoto; `main` não foi al
 
 ## Sumário
 
-0. [Revisões 1 e 2 — o que mudou](#0-revisão-1--o-que-mudou)
+0. [Revisões 1 e 2 — o que mudou](#0-revisão-1--o-que-mudou) · [Go-live: prefixo fin_financeiro_ e onboarding](#go-live-prefixo-fin_financeiro_-e-onboarding)
 
 1. [O que foi feito](#1-o-que-foi-feito)
 2. [Como rodar localmente](#2-como-rodar-localmente)
@@ -57,6 +57,33 @@ Migrations: as `fin_financeiro_` existentes foram editadas (ainda não aplicadas
 |---|---|---|
 | 1 | Open redirect no destino pós-login: `next.startsWith("/") && !next.startsWith("//")` aceitava `/\evil.com` (o navegador trata como `//evil.com`) | `safeNextPath()` (`src/lib/security/redirect.ts`) só aceita caminhos internos que casem com `/^\/(?![\/\\])[A-Za-z0-9\-._~\/?=&%]*$/` e confere também a forma decodificada (rejeita `/%5Cevil.com`, `/%2F%2Fevil.com`, caracteres de controle e esquemas). Fallback `/painel`. É o único ponto do app que redireciona a partir de parâmetro do usuário. Testes com `/\evil.com`, `//evil.com`, `/%5Cevil.com`, `https://evil.com` (rejeitados) e `/painel?x=1` (aceito). |
 | 2 | Classificador: qualquer "aplicação"/"resgate" virava transferência ("RESGATE PREMIO", "APLICACAO MULTA"); prefixo de adquirente podia virar pagamento de fatura | Aplicação/resgate exige o produto (cdb, rdb, poupança, lci, lca, fundo, tesouro, automática/aut) **ou** categoria Pluggy de investimento. Descrições com prefixo de adquirente (`PAG*JoseDaSilva`, `PG *LOJA`, `MP*…`) nunca são pagamento de fatura (nem pela categoria). No cartão, "pagamento" no início só conta com recebido/efetuado/obrigado/fatura ou sozinho. Testes unitários. |
+
+### Go-live: prefixo `fin_financeiro_` e onboarding
+
+- **Prefixo do banco**: todos os objetos novos passaram de `fam_` para **`fin_financeiro_`**
+  (tabelas, funções, triggers, policies, índices), o schema privado é **`fin_financeiro_private`**,
+  o papel de conexão é **`fin_financeiro_app`** (`supabase/manual/fin_financeiro_app_role.sql`) e o
+  bucket é **`fin_financeiro_faturas`**. Os arquivos das migrations foram renomeados para
+  `*_fin_financeiro_*`.
+- **Nomes reservados** (já existem no projeto, são do app ANTIGO e têm dados — o app novo **não**
+  cria, altera nem usa): `public.fin_financeiro_categorias`, `public.fin_financeiro_configuracoes`,
+  `public.fin_financeiro_empresas`, `public.fin_financeiro_lancamentos`,
+  `public.fin_financeiro_usuarios`, as views `public.fin_joao_vw_*` e a função
+  `public.fin_joao_get_user_empresa_id`. Nenhum objeto novo colide com eles (o app novo usa
+  `fin_financeiro_categories`, em inglês). Nenhum nome precisou ser trocado.
+- **Onboarding no app**: usuário logado sem família vê **"Criar minha família"** (nome da família +
+  seu nome) em `/sem-acesso`; ao enviar, a função
+  `fin_financeiro_private.fin_financeiro_create_my_household(p_name, p_display_name)` cria perfil,
+  família, ele como **dono**, categorias padrão e configurações — atômico, recusa quem já é membro,
+  valida tamanhos; EXECUTE só para `authenticated`. Fica no schema privado (fora da Data API) porque
+  o `auth.users` é compartilhado com outros apps. `SELF_ONBOARDING_ENABLED=false` desliga o caminho.
+  Depois, o dono convida a esposa em Configurações › Família.
+- **Sem `SUPABASE_SERVICE_ROLE_KEY`**: login (Supabase Auth `signInWithPassword` com
+  `NEXT_PUBLIC_SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY`), painel e onboarding funcionam; só o
+  upload/leitura de PDF fica indisponível (aviso na Revisão, 503 no download, erro registrado no
+  sync do Gmail).
+- **Pooler em modo transaction**: as consultas usam statement **sem nome** (nunca prepared
+  statements nomeados) e só `SET LOCAL`/`set_config(..., true)`, compatíveis com a porta 6543.
 
 ### Limitações conhecidas (após as revisões 1 e 2)
 - **`service_role` no Supabase alcança as outras tabelas do projeto** (tem `BYPASSRLS` e os
@@ -236,9 +263,9 @@ Números desconhecidos não recebem resposta nem dados.
 ```bash
 npm run typecheck
 npm run lint
-npm test             # 92 testes unitários
-npm run test:rls     # 56 testes de RLS no Postgres local real (porta 54330, recriado do zero; conecta como fin_financeiro_app)
-npm run test:e2e     # 31 testes ponta a ponta locais (conecta como fin_financeiro_app)
+npm test             # 97 testes unitários
+npm run test:rls     # 60 testes de RLS no Postgres local real (porta 54330, recriado do zero; conecta como fin_financeiro_app)
+npm run test:e2e     # 33 testes ponta a ponta locais (conecta como fin_financeiro_app)
 npm run build
 npm run screenshots  # fumaça no navegador + capturas (requer build e `npx playwright install chromium`)
 ```
@@ -449,7 +476,7 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 > de aplicar. Faça um backup/snapshot antes. Nada foi aplicado nele durante este trabalho.
 
 ### 1. Revisar as migrations
-`supabase/migrations/` (7 arquivos, nesta ordem):
+`supabase/migrations/` (8 arquivos, nesta ordem):
 
 | Arquivo | Conteúdo |
 |---|---|
@@ -460,6 +487,7 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 | `20261119000500_fin_financeiro_bills_goals_prefs.sql` | contas a pagar (boleto/Pix), metas, busca, patrimônio, preferências |
 | `20261119000600_fin_financeiro_whatsapp_log_pluggy_sync.sql` | log do WhatsApp e grants de sincronização |
 | `20261120000700_fin_financeiro_pdf_password_invoice_dates.sql` | senha de PDF cifrada por perfil e recálculo de faturas abertas |
+| `20261120000800_fin_financeiro_self_onboarding.sql` | "Criar minha família" (`fin_financeiro_private.fin_financeiro_create_my_household`) |
 
 Garantias: somente `create ... fin_financeiro_*` (tabelas, índices, funções, triggers, políticas) e o
 schema novo `fin_financeiro_private` (RPCs de login/convite, não exposto pela Data API);
@@ -467,12 +495,17 @@ schema novo `fin_financeiro_private` (RPCs de login/convite, não exposto pela D
 `auth.users`; não reutiliza nomes `fin_joao_*`; não cria `invest_*`. (Um teste automático
 confere que as migrations não criam objetos fora do prefixo `fin_financeiro_`.)
 
-Antes de aplicar, confira que não há conflito de nomes:
+Antes de aplicar, confira que nenhum dos nomes NOVOS já existe (deve voltar vazio):
 ```sql
-select tablename from pg_tables where schemaname='public' and tablename like 'fin\_financeiro\_%';
-select proname from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and proname like 'fin\_financeiro\_%';
+select tablename from pg_tables where schemaname = 'public' and tablename in ('fin_financeiro_bank_accounts','fin_financeiro_bills','fin_financeiro_card_purchases','fin_financeiro_cards','fin_financeiro_categories','fin_financeiro_entries','fin_financeiro_gmail_connections','fin_financeiro_goal_contributions','fin_financeiro_goals','fin_financeiro_household_invites','fin_financeiro_household_members','fin_financeiro_household_settings','fin_financeiro_households','fin_financeiro_invest_links','fin_financeiro_invoice_documents','fin_financeiro_invoices','fin_financeiro_login_attempts','fin_financeiro_networth_snapshots','fin_financeiro_notification_log','fin_financeiro_oauth_tokens','fin_financeiro_pdf_passwords','fin_financeiro_pluggy_items','fin_financeiro_profile_prefs','fin_financeiro_profiles','fin_financeiro_review_queue','fin_financeiro_search_history','fin_financeiro_whatsapp_config','fin_financeiro_whatsapp_inbound','fin_financeiro_whatsapp_messages','fin_financeiro_whatsapp_numbers','fin_financeiro_whatsapp_secrets');
+select n.nspname, p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where p.proname like 'fin\_financeiro\_%' or n.nspname = 'fin_financeiro_private';
+select 1 from pg_namespace where nspname = 'fin_financeiro_private';
+select 1 from pg_roles where rolname = 'fin_financeiro_app';
 ```
-(ambas devem voltar vazias)
+A busca por `like 'fin\_financeiro\_%'` em **tabelas** vai mostrar as 5 tabelas reservadas do app
+antigo (`fin_financeiro_categorias`, `_configuracoes`, `_empresas`, `_lancamentos`, `_usuarios`):
+isso é esperado — elas não são tocadas.
 
 ### 2. Aplicar
 **Recomendado — SQL Editor do Supabase**: cole e execute **um arquivo por vez, na ordem**.
@@ -503,8 +536,10 @@ Confira que o schema `fin_financeiro_private` **não** está na lista de schemas
    use o papel `postgres` no app: abra um chamado/consulte a documentação de papéis customizados
    do Supabase antes do go-live.
 
-### 3. Storage
-Crie manualmente o bucket **privado** `fin_financeiro_faturas` (Storage › New bucket, sem acesso público).
+### 3. Storage (opcional por enquanto)
+Só é necessário para o upload de PDFs de fatura — e só funciona com `SUPABASE_SERVICE_ROLE_KEY`.
+Sem a chave o app funciona normalmente e mostra "Upload de PDF indisponível" na Revisão.
+Quando houver a chave: crie manualmente o bucket **privado** `fin_financeiro_faturas` (Storage › New bucket, sem acesso público).
 O app não cria nem altera buckets. Os arquivos ficam em `<família>/<usuário>/<sha256>.pdf` e só
 são lidos pelo servidor depois de a RLS confirmar que o documento é do usuário.
 
@@ -512,22 +547,27 @@ são lidos pelo servidor depois de a RLS confirmar que o documento é do usuári
 - As contas do Luiz e da esposa precisam existir no **Supabase Auth** (podem ser contas que já
   usam em outros apps — o `auth.users` é compartilhado). Para criar: Authentication › Users ›
   Add user (senha forte, ≥ 12 caracteres).
-- Crie a família (escreve somente em tabelas `fin_financeiro_`):
+- **Caminho recomendado (pelo app)**: o Luiz entra no painel → como ainda não tem família, vê
+  **"Criar minha família"** → informa o nome da família e o nome dele → vira dono e cai no
+  `/painel`. Em **Configurações › Família › Gerar link de convite**, ele envia o link à esposa,
+  que abre `/convite/<token>` logada com a conta dela.
+- Depois que os dois estiverem dentro, opcionalmente defina `SELF_ONBOARDING_ENABLED=false` na
+  Vercel (novos acessos só por convite).
+- Alternativa por script (escreve somente em tabelas `fin_financeiro_`):
   ```bash
   DATABASE_URL_ADMIN="postgres://..." npm run bootstrap -- --owner-email luiz@... --owner-name Luiz \
     --household "Família do Luiz" --member-email esposa@... --member-name "<nome>"        # dry-run
   DATABASE_URL_ADMIN="postgres://..." npm run bootstrap -- ... --yes                      # aplica
   ```
-  Alternativa para a esposa: Configurações › Família › **Gerar link de convite** (o dono) e ela
-  abre `/convite/<token>` logada com a conta dela.
 
 ### 5. Vercel
 1. Importe o repositório (framework Next.js; região `gru1` em `vercel.json`).
 2. Variáveis (todas documentadas em `.env.example`): `APP_URL`, `DATABASE_URL` (**papel `fin_financeiro_app`**,
    pooler em modo transaction, porta 6543 — nunca o `postgres`; `DATABASE_URL_ADMIN` **não** vai
    para a Vercel), `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-   `SUPABASE_SERVICE_ROLE_KEY`, `LOGIN_RATE_LIMIT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CRON_SECRET`,
-   `OAUTH_STATE_SECRET`, `STORAGE_DRIVER=supabase`, Gmail, Pluggy, WhatsApp.
+   `LOGIN_RATE_LIMIT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `CRON_SECRET`, `OAUTH_STATE_SECRET`,
+   `STORAGE_DRIVER=supabase`, `SELF_ONBOARDING_ENABLED`, Gmail, Pluggy, WhatsApp.
+   `SUPABASE_SERVICE_ROLE_KEY` é **opcional** (só para o upload de PDF).
    **Nunca** defina `LOCAL_DEV_AUTH` na Vercel (o app recusa).
 3. Deploy. Os crons de `vercel.json` passam a chamar `/api/cron/*` com `Authorization: Bearer $CRON_SECRET`
    (no plano Hobby os crons são diários — os horários escolhidos já respeitam isso).
@@ -552,7 +592,9 @@ DATABASE_URL_ADMIN=... npm run import:bills -- --source-user <uuid do dono das b
   cartão/conta usados são visíveis a quem lança.
 - **Cadastro não concede nada**: sem trigger em `auth.users`; vínculo apenas por
   `fin_financeiro_accept_invite` (token de uso único, só hash no banco, expira em 7 dias, limite de 2
-  membros) ou `fin_financeiro_bootstrap_household` (somente service role).
+  membros), `fin_financeiro_bootstrap_household` (somente service role) ou o onboarding
+  explícito `fin_financeiro_private.fin_financeiro_create_my_household` (usuário logado sem família
+  cria a SUA família; não dá acesso a nenhuma outra).
 - **anon** sem privilégio em nenhuma tabela; só pode chamar as RPCs de limite de login e de
   informação do convite.
 - **Conexão do app**: papel `fin_financeiro_app` **NOINHERIT** — sem `SET ROLE` não tem privilégio. Por
@@ -569,7 +611,7 @@ DATABASE_URL_ADMIN=... npm run import:bills -- --source-user <uuid do dono das b
      localização do item (Pluggy) — o processamento em si roda **como o membro** (RLS);
   3. registro das mensagens enviadas no `fin_financeiro_whatsapp_messages` (inclui o botão "Testar" do dono);
   4. leitura da senha de PDF cifrada pelo job do Gmail;
-  5. Storage em produção (upload/leitura de PDF, com a service key), sempre depois de a RLS
+  5. Storage em produção (upload/leitura de PDF, com a service key — opcional), sempre depois de a RLS
      autorizar o documento;
   6. somente local: verificador de senha do modo `LOCAL_DEV_AUTH` (shim `auth.users`), botões de
      jobs do simulador e "Sincronizar agora (mock)" do Gmail.
