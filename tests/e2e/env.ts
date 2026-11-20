@@ -13,6 +13,8 @@ Object.assign(process.env, {
   CRON_SECRET: "e2e-cron-secret-0123456789abcdef",
   TOKEN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
   META_WHATSAPP_APP_SECRET: "e2e-meta-app-secret",
+  META_WHATSAPP_VERIFY_TOKEN: "e2e-meta-verify-token",
+  EVOLUTION_INSTANCE_NAME: "financeiro",
   WHATSAPP_PROVIDER: "simulator",
   PLUGGY_MODE: "mock",
   GMAIL_MODE: "mock",

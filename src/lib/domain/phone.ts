@@ -21,7 +21,10 @@ export function normalizePhone(raw: string): string | null {
 /** "5511987654321@s.whatsapp.net" ou "5511987654321:12@s.whatsapp.net" -> "+5511987654321". Grupos -> null. */
 export function jidToPhone(jid: string): string | null {
   if (!jid || jid.endsWith("@g.us") || jid.includes("broadcast")) return null;
-  const user = jid.split("@")[0]?.split(":")[0] ?? "";
+  const [userPart, domain] = jid.split("@");
+  // só JIDs de telefone: "@s.whatsapp.net", "@c.us" ou apenas os dígitos. "@lid" (id interno) NÃO é telefone.
+  if (domain !== undefined && domain !== "s.whatsapp.net" && domain !== "c.us") return null;
+  const user = userPart?.split(":")[0] ?? "";
   if (!/^\d{8,15}$/.test(user)) return null;
   return normalizePhone(user);
 }

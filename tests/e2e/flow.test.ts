@@ -255,6 +255,9 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
     const meta = new Request("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-hub-signature-256": "sha256=00" }, body: "{}" });
     expect((await whatsappWebhook(meta)).status).toBe(401);
     expect((await whatsappVerify(new Request("http://localhost/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=x&hub.challenge=1"))).status).toBe(403);
+    const ok = await whatsappVerify(new Request("http://localhost/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=e2e-meta-verify-token&hub.challenge=42"));
+    expect(ok.status).toBe(200);
+    expect(await ok.text()).toBe("42");
   });
   it("aceita assinatura Meta válida", async () => {
     const raw = JSON.stringify({ object: "whatsapp_business_account", entry: [{ changes: [{ value: { messages: [{ from: "5511990000001", id: "wamid.1", type: "text", text: { body: "ajuda" } }] } }] }] });
@@ -272,6 +275,20 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
     expect(out.at(-1)?.body).toContain("R$ 50,00");
     expect(out.at(-1)?.body).toContain("desfazer");
   });
+  it("Evolution com remoteJid @lid usa o número alternativo; instância diferente é ignorada", async () => {
+    const lid = evolutionPayload(esposa.phone, "gastei 12 padaria");
+    const realJid = lid.data.key.remoteJid;
+    Object.assign(lid.data.key, { remoteJid: "201234567890123@lid", remoteJidAlt: realJid });
+    expect(((await (await whatsappWebhook(waRequest(lid))).json()) as { status: string }).status).toBe("processado");
+    const e = await withUser(esposa.id, (db) => db.one<{ description: string }>("select description from fam_entries where source = 'whatsapp' order by created_at desc limit 1"));
+    expect(e?.description).toBe("padaria");
+    const noNumber = evolutionPayload(esposa.phone, "saldo");
+    noNumber.data.key.remoteJid = "201234567890123@lid";
+    expect(((await (await whatsappWebhook(waRequest(noNumber))).json()) as { ignored: string }).ignored).toBe("lid sem número");
+    const otherInstance = { ...evolutionPayload(esposa.phone, "saldo"), instance: "instancia-de-outro-app" };
+    expect(((await (await whatsappWebhook(waRequest(otherInstance))).json()) as { ignored: string }).ignored).toBe("instância diferente");
+  });
+
   it("deduplica por id, ignora fromMe, grupos e números desconhecidos", async () => {
     expect((await sendWa(luiz.phone, "gastei 50 mercado", "MSG-1")).status).toBe("duplicado");
     const fromMe = evolutionPayload(luiz.phone, "gastei 1 x");
