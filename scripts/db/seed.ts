@@ -7,7 +7,7 @@
  */
 import pg from "pg";
 import { hashPassword } from "../../src/lib/security/password";
-import { addDays, addMonths, currentMonthStart, monthStartOf, todayISO, toISODate, parseISODate } from "../../src/lib/domain/dates";
+import { addDays, addMonths, monthStartOf, todayISO, toISODate, parseISODate } from "../../src/lib/domain/dates";
 import { planInstallments } from "../../src/lib/domain/invoices";
 import { arrecadacaoBarcodeToLine, bancarioBarcodeToLine, buildArrecadacaoBarcode, buildBancarioBarcode, dateToFactor } from "../../src/lib/domain/boleto";
 import { buildPixCopiaECola } from "../../src/lib/domain/pix";
@@ -112,7 +112,7 @@ export async function seed(url: string, opts: { quiet?: boolean; today?: string 
     await q("update public.fam_invoices set status = 'paga', paid_at = now() where due_date < $1", [today]);
 
     // contas a pagar com códigos válidos
-    const luzDue = addDays(today, 2), netDue = addDays(today, 5), condDue = addDays(today, 1), acadDue = addDays(today, 3), ipvaDue = addDays(today, 10);
+    const luzDue = addDays(today, 3), netDue = addDays(today, 5), condDue = addDays(today, 1), acadDue = addDays(today, 3), ipvaDue = addDays(today, 10);
     const luzLine = arrecadacaoBarcodeToLine(buildArrecadacaoBarcode("3", "6", 23480, "0048" + luzDue.replace(/-/g, "") + "0".repeat(17)));
     const netLine = bancarioBarcodeToLine(buildBancarioBarcode("341", dateToFactor(netDue), 11990, "1570000123456789012345678"));
     const condPix = buildPixCopiaECola({ key: "11222333000181", name: "COND RESIDENCIAL", city: "SAO PAULO", amountCents: 78000, txid: "COND" + today.replace(/-/g, "") });
