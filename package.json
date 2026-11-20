@@ -1,0 +1,64 @@
+{
+  "name": "financeiro-familia",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:rls": "vitest run -c vitest.db.config.ts tests/rls",
+    "test:e2e": "vitest run -c vitest.db.config.ts tests/e2e",
+    "test:all": "npm run test && npm run test:rls && npm run test:e2e",
+    "setup:local": "tsx scripts/setup-local.ts",
+    "dev:local": "tsx scripts/dev-local.ts",
+    "db:local:start": "tsx scripts/db/local.ts start",
+    "db:local:stop": "tsx scripts/db/local.ts stop",
+    "db:local:status": "tsx scripts/db/local.ts status",
+    "db:local:migrate": "tsx scripts/db/local.ts migrate",
+    "db:local:seed": "tsx scripts/db/local.ts seed",
+    "db:local:reset": "tsx scripts/db/local.ts reset",
+    "screenshots": "tsx scripts/screenshots.ts",
+    "bootstrap": "tsx scripts/bootstrap.ts",
+    "import:bills": "tsx scripts/import-bills.ts",
+    "check": "npm run typecheck && npm run lint && npm run test:all && npm run build"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.119.2",
+    "lucide-react": "^1.76.0",
+    "motion": "^14.14.0",
+    "next": "^16.4.6",
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "unpdf": "^2.2.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "embedded-postgres": "^15.20.0-beta.19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.6",
+    "playwright": "^1.65.1",
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.1"
+  },
+  "allowScripts": {
+    "@embedded-postgres/linux-x64@15.20.0-beta.19": true,
+    "esbuild@0.28.2": true
+  }
+}

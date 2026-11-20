@@ -1,3 +1,29 @@
-node_modules/ 
-.env 
-.DS_Store 
+# deps / build
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# env & secrets — NUNCA commitar
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# supabase local
+supabase/.temp/
+supabase/.branches/
+
+# misc
+.DS_Store
+.vercel
+npm-debug.log*
+
+# banco local, storage local, screenshots temporários
+.local/
+playwright-report/
+test-results/
