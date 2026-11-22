@@ -8,6 +8,11 @@ export interface OutboundTarget {
   householdId: string;
   userId: string | null;
   phone: string;
+  /**
+   * Destino exato informado pela Meta no webhook (wa_id, que para celulares BR pode vir sem o
+   * 9º dígito). Responder para ele é o que garante a entrega; só é usado com o provedor Meta.
+   */
+  providerTo?: string;
 }
 
 /**
@@ -32,7 +37,7 @@ export async function sendMessages(target: OutboundTarget, messages: string[], p
       r = { ok: false, error: setupError ?? "provedor indisponível" };
     } else {
       try {
-        r = await p.sendText(target.phone, body);
+        r = await p.sendText(p.name === "meta" && target.providerTo ? target.providerTo : target.phone, body);
       } catch (e) {
         r = { ok: false, error: e instanceof Error ? e.message.slice(0, 200) : "erro" };
       }

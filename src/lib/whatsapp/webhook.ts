@@ -19,18 +19,7 @@ export async function handleWebhookRequest(req: Request): Promise<Response> {
   if (raw.length > MAX_BODY) return Response.json({ error: "payload grande demais" }, { status: 413 });
   const metaSig = req.headers.get("x-hub-signature-256");
 
-  if (metaSig) {
-    if (!verifyMetaSignature(raw, metaSig, process.env.META_WHATSAPP_APP_SECRET)) return Response.json({ error: "assinatura inválida" }, { status: 401 });
-    let body: unknown;
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return Response.json({ error: "json inválido" }, { status: 400 });
-    }
-    const results = [];
-    for (const m of parseMetaPayload(body)) results.push((await handleInbound(m)).status);
-    return Response.json({ ok: true, results });
-  }
+  if (metaSig) return handleMetaPost(raw, metaSig);
 
   if (!checkBearer(req.headers.get("authorization"), env.secret("WHATSAPP_WEBHOOK_SECRET"))) {
     return Response.json({ error: "não autorizado" }, { status: 401 });
@@ -56,11 +45,38 @@ async function allowedInstances(): Promise<string[]> {
   return [...new Set([fromEnv, ...rows.map((r) => r.i)])];
 }
 
+/**
+ * POST da Meta. Assinatura inválida/ausente de segredo = 401 (falha fechada). Com assinatura
+ * válida responde SEMPRE 200 — mesmo para eventos de outros números da mesma WABA, statuses,
+ * tipos sem texto ou erro interno ao processar — para a Meta não reenviar nem desativar o webhook.
+ * Só processa mudanças do META_WHATSAPP_PHONE_NUMBER_ID configurado (sem ele, ignora tudo).
+ */
+async function handleMetaPost(raw: string, signature: string): Promise<Response> {
+  if (!verifyMetaSignature(raw, signature, process.env.META_WHATSAPP_APP_SECRET)) return Response.json({ error: "assinatura inválida" }, { status: 401 });
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return Response.json({ ok: true, ignored: "json inválido" });
+  }
+  const parsed = parseMetaPayload(body, { phoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID });
+  const results: string[] = [];
+  for (const m of parsed.messages) {
+    try {
+      results.push((await handleInbound(m)).status);
+    } catch (e) {
+      console.error("whatsapp webhook meta:", e instanceof Error ? e.message.slice(0, 200) : "erro");
+      results.push("erro");
+    }
+  }
+  return Response.json({ ok: true, results, ignored: parsed.ignored });
+}
+
 /** Verificação do webhook da Meta (GET hub.challenge). */
 export function handleMetaVerify(url: URL): Response {
   const token = process.env.META_WHATSAPP_VERIFY_TOKEN;
   if (token && url.searchParams.get("hub.mode") === "subscribe" && safeEqual(url.searchParams.get("hub.verify_token"), token)) {
-    return new Response(url.searchParams.get("hub.challenge") ?? "", { status: 200 });
+    return new Response(url.searchParams.get("hub.challenge") ?? "", { status: 200, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });
   }
-  return new Response("forbidden", { status: 403 });
+  return new Response("forbidden", { status: 403, headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }

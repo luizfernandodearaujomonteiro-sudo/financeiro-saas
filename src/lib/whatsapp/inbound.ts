@@ -8,6 +8,11 @@ export interface InboundMessage {
   phone: string; // E.164
   text: string;
   pushName?: string;
+  /**
+   * Destino exato para a resposta no provedor (Meta: o `from`/wa_id recebido, que para
+   * celulares BR costuma vir SEM o 9º dígito). `phone` continua normalizado para a busca.
+   */
+  replyTo?: string;
 }
 
 const evolutionSchema = z.object({
@@ -84,34 +89,66 @@ export function parseEvolutionPayload(body: unknown, opts: EvolutionParseOptions
   return { kind: "message", message: { provider: "evolution", messageId: p.data.key.id, phone, text, pushName: p.data.pushName ?? undefined } };
 }
 
-const metaSchema = z.object({
-  object: z.string(),
-  entry: z.array(
-    z.object({
-      changes: z.array(
-        z.object({
-          value: z
-            .object({
-              messages: z
-                .array(z.object({ from: z.string().max(20), id: z.string().max(128), type: z.string(), text: z.object({ body: z.string().max(4000) }).optional() }))
-                .optional(),
-            })
-            .passthrough(),
-        }),
-      ),
-    }),
-  ),
+const metaEnvelope = z.object({
+  object: z.literal("whatsapp_business_account"),
+  entry: z.array(z.object({ changes: z.array(z.unknown()).optional() }).passthrough()).max(100),
 });
 
-export function parseMetaPayload(body: unknown): InboundMessage[] {
-  const r = metaSchema.safeParse(body);
-  if (!r.success) return [];
-  const out: InboundMessage[] = [];
-  for (const e of r.data.entry)
-    for (const c of e.changes)
-      for (const m of c.value.messages ?? []) {
-        const phone = normalizePhone(m.from);
-        if (m.type === "text" && m.text?.body && phone) out.push({ provider: "meta", messageId: m.id, phone, text: m.text.body.trim() });
+const metaChange = z.object({
+  field: z.string().optional(),
+  value: z
+    .object({
+      metadata: z.object({ phone_number_id: z.string().max(64) }).passthrough().optional(),
+      messages: z.array(z.unknown()).optional(),
+    })
+    .passthrough(),
+});
+
+const metaTextMessage = z.object({
+  from: z.string().regex(/^\d{8,15}$/),
+  id: z.string().min(1).max(256),
+  type: z.literal("text"),
+  text: z.object({ body: z.string().max(4000) }),
+});
+
+export interface MetaParseOptions {
+  /**
+   * phone_number_id do NOSSO número. A conta (WABA) hospeda outros números de outros sistemas:
+   * só mudanças com value.metadata.phone_number_id igual a este são processadas.
+   * Vazio/ausente = ignora tudo (falha fechada).
+   */
+  phoneNumberId: string | null | undefined;
+}
+
+export interface MetaParse {
+  messages: InboundMessage[];
+  /** Quantidade de itens descartados (outro número, status, tipos sem texto, inválidos). */
+  ignored: number;
+}
+
+export function parseMetaPayload(body: unknown, opts: MetaParseOptions): MetaParse {
+  const out: MetaParse = { messages: [], ignored: 0 };
+  const parsed = metaEnvelope.safeParse(body);
+  if (!parsed.success) return { messages: [], ignored: 1 };
+  const ownId = opts.phoneNumberId?.trim();
+  for (const e of parsed.data.entry)
+    for (const raw of e.changes ?? []) {
+      const c = metaChange.safeParse(raw);
+      // statuses (sent/delivered/read), outros campos e outros números: ignorados sem erro
+      if (!c.success || !ownId || (c.data.field && c.data.field !== "messages") || c.data.value.metadata?.phone_number_id !== ownId || !c.data.value.messages?.length) {
+        out.ignored++;
+        continue;
       }
+      for (const rawMsg of c.data.value.messages) {
+        const m = metaTextMessage.safeParse(rawMsg);
+        const phone = m.success ? normalizePhone(m.data.from) : null;
+        const text = m.success ? m.data.text.body.trim() : "";
+        if (!m.success || !phone || !text) {
+          out.ignored++;
+          continue;
+        }
+        out.messages.push({ provider: "meta", messageId: m.data.id, phone, text, replyTo: m.data.from });
+      }
+    }
   return out;
 }

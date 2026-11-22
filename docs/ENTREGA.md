@@ -398,16 +398,41 @@ Endpoints usados pelo adaptador (`src/lib/whatsapp/evolution.ts`): `POST /messag
 `DELETE /instance/logout/{i}`, `POST /webhook/set/{i}`. Melhoria futura opcional:
 **allowlist de IP** da Central no webhook.
 
-### Alternativa: Meta WhatsApp Cloud API
+### Meta WhatsApp Cloud API (provedor oficial)
 1. Crie um app no Meta for Developers, adicione o produto WhatsApp e um número.
 2. Gere um token permanente (System User) → `META_WHATSAPP_ACCESS_TOKEN`; anote o
    `META_WHATSAPP_PHONE_NUMBER_ID`, o **App Secret** (`META_WHATSAPP_APP_SECRET`) e defina um
    `META_WHATSAPP_VERIFY_TOKEN`.
 3. Webhook: URL `https://<deploy>/api/whatsapp/webhook`, verify token igual ao configurado,
    assine o campo `messages`.
-4. `WHATSAPP_PROVIDER=meta` (ou escolha "Meta" em Configurações).
+4. `WHATSAPP_PROVIDER=meta` (ou escolha "Meta" em Configurações; uma linha salva em
+   `fin_financeiro_whatsapp_config` tem precedência sobre o ambiente, exceto `simulator`).
 5. Atenção: fora da janela de 24 h a Meta só permite **templates aprovados** — os alertas,
    lembretes e resumos precisariam de templates (TODO, ver §11).
+
+Comportamento do webhook Meta:
+- `GET`: `hub.mode=subscribe` + `hub.verify_token` correto → devolve `hub.challenge` (text/plain, 200); senão 403.
+- `POST`: assinatura `X-Hub-Signature-256` inválida ou `META_WHATSAPP_APP_SECRET` ausente → 401.
+  Com assinatura válida responde **sempre 200** (mesmo em erro interno), para a Meta não reenviar
+  nem desativar o webhook.
+- **Vários números na mesma WABA**: só mudanças com `value.metadata.phone_number_id` igual a
+  `META_WHATSAPP_PHONE_NUMBER_ID` são processadas; outros números, `statuses` e mensagens que não
+  são texto são ignorados. Sem `META_WHATSAPP_PHONE_NUMBER_ID`, ignora tudo (falha fechada). O id
+  do ambiente também vence o do banco no envio — nunca se envia de outro número.
+- **9º dígito (BR)**: a Meta costuma mandar o `from`/wa_id de celulares sem o 9 (ex.: `552175888692`).
+  A busca do remetente usa o número normalizado (`+5521975888692`) e a **resposta vai para o wa_id
+  exato** recebido. Envios do cron usam o E.164 cadastrado.
+- Erros de envio registram `Meta HTTP <status>: código <code>: <mensagem>` em
+  `fin_financeiro_whatsapp_messages.error` (sem token).
+
+| Variável | Valor |
+|---|---|
+| `WHATSAPP_PROVIDER` | `meta` |
+| `META_WHATSAPP_PHONE_NUMBER_ID` | phone_number_id do número do assistente (ex.: `970939662768046`) |
+| `META_WHATSAPP_ACCESS_TOKEN` | token permanente do System User |
+| `META_WHATSAPP_APP_SECRET` | App Secret do app Meta |
+| `META_WHATSAPP_VERIFY_TOKEN` | texto aleatório, igual ao informado no painel da Meta |
+| `META_GRAPH_API_VERSION` | opcional, padrão `v21.0` |
 
 ### Alertas de vencimento (formato)
 - Mensagem 1: texto do alerta (descrição, valor, vencimento, "vence em N dias / amanhã / HOJE").

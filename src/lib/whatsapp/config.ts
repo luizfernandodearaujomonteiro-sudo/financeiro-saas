@@ -84,7 +84,8 @@ function resolve(row: Row | null) {
     evolutionBaseUrl: row?.evolution_base_url || process.env.EVOLUTION_BASE_URL || EVOLUTION_DEFAULTS.baseUrl,
     evolutionInstance: row?.evolution_instance || process.env.EVOLUTION_INSTANCE_NAME || EVOLUTION_DEFAULTS.instance,
     evolutionTokenSource: evoEnv?.source ?? (row?.evolution_token_enc ? "banco" : null),
-    metaPhoneNumberId: row?.meta_phone_number_id || process.env.META_WHATSAPP_PHONE_NUMBER_ID || null,
+    // o ambiente vence: o webhook só aceita esse número, então os envios também saem só dele
+    metaPhoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID?.trim() || row?.meta_phone_number_id || null,
     metaTokenSource: process.env.META_WHATSAPP_ACCESS_TOKEN ? "env" : row?.meta_access_token_enc ? "banco" : null,
     metaAppSecretConfigured: Boolean(process.env.META_WHATSAPP_APP_SECRET),
     metaVerifyTokenConfigured: Boolean(process.env.META_WHATSAPP_VERIFY_TOKEN),
@@ -114,7 +115,7 @@ function buildProvider(row: Row | null): WhatsAppProvider {
   if (pub.provider === "simulator") return createSimulatorProvider();
   if (pub.provider === "meta") {
     if (!pub.metaPhoneNumberId || !metaToken) throw new Error("Meta Cloud API não configurada (phone number id / access token)");
-    return createMetaProvider({ phoneNumberId: pub.metaPhoneNumberId, accessToken: metaToken, apiVersion: process.env.META_GRAPH_API_VERSION });
+    return createMetaProvider({ phoneNumberId: pub.metaPhoneNumberId, accessToken: metaToken.trim(), apiVersion: process.env.META_GRAPH_API_VERSION?.trim() || undefined });
   }
   if (!evolutionToken) throw new Error("Token da instância Evolution não configurado");
   return createEvolutionProvider({ baseUrl: pub.evolutionBaseUrl, instance: pub.evolutionInstance, token: evolutionToken, allowConnect: pub.allowConnect });

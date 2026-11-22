@@ -327,7 +327,7 @@ describe("7. WhatsApp: webhook Evolution + comandos + desfazer", () => {
     expect(await ok.text()).toBe("42");
   });
   it("aceita assinatura Meta válida", async () => {
-    const raw = JSON.stringify({ object: "whatsapp_business_account", entry: [{ changes: [{ value: { messages: [{ from: "5511990000001", id: "wamid.1", type: "text", text: { body: "ajuda" } }] } }] }] });
+    const raw = JSON.stringify({ object: "whatsapp_business_account", entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "100000000000001" }, messages: [{ from: "5511990000001", id: "wamid.1", type: "text", text: { body: "ajuda" } }] } }] }] });
     const sig = "sha256=" + createHmac("sha256", "e2e-meta-app-secret").update(raw).digest("hex");
     const res = await whatsappWebhook(new Request("http://localhost/api/whatsapp/webhook", { method: "POST", headers: { "x-hub-signature-256": sig }, body: raw }));
     expect(((await res.json()) as { results: string[] }).results).toEqual(["processado"]);

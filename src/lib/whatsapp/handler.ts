@@ -37,6 +37,6 @@ export async function handleInbound(msg: InboundMessage, now = new Date()): Prom
     ]),
   );
   const replies = await executeCommand(sender, parseCommand(msg.text), now);
-  await sendMessages({ householdId: sender.householdId, userId: sender.userId, phone: msg.phone }, replies);
+  await sendMessages({ householdId: sender.householdId, userId: sender.userId, phone: msg.phone, providerTo: msg.replyTo }, replies);
   return { status: "processado", replies };
 }

@@ -14,6 +14,7 @@ Object.assign(process.env, {
   TOKEN_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
   META_WHATSAPP_APP_SECRET: "e2e-meta-app-secret",
   META_WHATSAPP_VERIFY_TOKEN: "e2e-meta-verify-token",
+  META_WHATSAPP_PHONE_NUMBER_ID: "100000000000001",
   EVOLUTION_INSTANCE_NAME: "financeiro",
   WHATSAPP_PROVIDER: "simulator",
   PLUGGY_MODE: "mock",

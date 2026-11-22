@@ -67,6 +67,10 @@ Resumo — detalhes e alertas em [docs/ENTREGA.md › Go-live](docs/ENTREGA.md#g
 4. O Luiz entra no painel e usa **"Criar minha família"**; depois convida a esposa em
    Configurações › Família (alternativa: `npm run bootstrap` com `DATABASE_URL_ADMIN`).
 5. Configure os webhooks (WhatsApp/Evolution; Pluggy com header `x-webhook-secret`) e o OAuth do Google.
+   WhatsApp oficial (Meta Cloud API): `WHATSAPP_PROVIDER=meta` + `META_WHATSAPP_ACCESS_TOKEN`,
+   `META_WHATSAPP_PHONE_NUMBER_ID`, `META_WHATSAPP_APP_SECRET`, `META_WHATSAPP_VERIFY_TOKEN`
+   (opcional `META_GRAPH_API_VERSION`, padrão `v21.0`); webhook em `/api/whatsapp/webhook`, campo
+   `messages`. Só eventos do `phone_number_id` configurado são processados — ver `docs/ENTREGA.md` §5.
 
 ## Segurança (resumo)
 
