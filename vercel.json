@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "regions": ["gru1"],
+  "crons": [
+    { "path": "/api/cron/whatsapp-due-alerts", "schedule": "0 11 * * *" },
+    { "path": "/api/cron/whatsapp-daily-reminder", "schedule": "30 23 * * *" },
+    { "path": "/api/cron/whatsapp-weekly-summary", "schedule": "0 12 * * 0" },
+    { "path": "/api/cron/gmail-sync", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/pluggy-sync", "schedule": "0 10 * * *" }
+  ]
+}

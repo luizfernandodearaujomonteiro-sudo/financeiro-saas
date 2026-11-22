@@ -1,283 +1,108 @@
-# 💰 Sistema de Gestão Financeira - SaaS Multi-tenant
+# Finanças da Família
 
-Sistema completo de gestão financeira para pequenos negócios (confeitarias, barbearias, lanchonetes, clínicas).
+Painel financeiro **compartilhado** para o Luiz e a esposa: lançamentos, cartões e faturas
+(com parcelas), contas a pagar com boleto/Pix, revisão de faturas do Gmail, Open Finance
+(Pluggy), assistente no WhatsApp, metas, patrimônio, investimentos, busca e relatórios.
+Interface em português, escura por padrão (com tema claro e automático por horário).
 
-## 📋 Funcionalidades
+> Guia completo de entrega (como usar, testar cada recurso, WhatsApp, go-live e riscos):
+> **[docs/ENTREGA.md](docs/ENTREGA.md)**
 
-### ✅ Implementadas
-- **Autenticação** - Login, cadastro self-service, sessões seguras
-- **Multi-tenant** - Isolamento completo de dados por empresa (RLS)
-- **Lançamentos** - CRUD completo de receitas e despesas
-- **Categorias** - Gestão personalizada de categorias
-- **Dashboard** - Cards de resumo, gráficos interativos
-- **DRE Simplificada** - Demonstração de resultado
-- **Ponto de Equilíbrio** - Cálculo automático com visual didático
-- **Relatórios** - Exportação em PDF
-- **Mobile-first** - Interface 100% responsiva
+## Stack
 
-### 📊 Relatórios
-- Receita vs Despesa (gráfico de linha)
-- Despesas por categoria (gráfico donut)
-- Custos Fixos vs Variáveis (gráfico de barras)
-- Resultado mensal histórico
-- DRE simplificada
+- **Next.js 16** (App Router, TypeScript strict) — um único app, pronto para a **Vercel**
+- **Supabase**: Postgres + Auth (+ Storage) — RLS em todas as tabelas `fin_financeiro_`
+- Migrations SQL **aditivas** em `supabase/migrations` (somente objetos `fin_financeiro_`)
+- Crons da Vercel em `vercel.json`
+- Tailwind v4, `motion`, `lucide-react`, `zod`, `pg`
+- Testes: Vitest (unitários) + Postgres **local** real (`embedded-postgres`) para RLS e ponta a ponta + Playwright (fumaça no navegador e capturas)
 
-## 🛠️ Stack Tecnológica
+## Rodar localmente (sem Docker, sem Supabase)
 
-| Camada | Tecnologia |
-|--------|------------|
-| Frontend | React 18 + Vite |
-| Estilização | Tailwind CSS |
-| Gráficos | Recharts |
-| Ícones | Lucide React |
-| Backend | Node.js + Express |
-| Banco de Dados | Supabase (PostgreSQL) |
-| Autenticação | Supabase Auth |
-| PDF | PDFKit |
-
-## 📁 Estrutura do Projeto
-
-```
-financeiro-saas/
-├── database/
-│   └── supabase-schema.sql    # Schema SQL + RLS
-├── backend/
-│   ├── package.json
-│   ├── .env.example
-│   └── src/
-│       ├── server.js          # Servidor Express
-│       ├── config/
-│       │   └── supabase.js    # Cliente Supabase
-│       ├── middlewares/
-│       │   ├── auth.js        # Autenticação
-│       │   └── errorHandler.js
-│       ├── routes/
-│       │   ├── auth.js        # Login/Cadastro
-│       │   ├── lancamentos.js # CRUD lançamentos
-│       │   ├── categorias.js  # CRUD categorias
-│       │   ├── relatorios.js  # Dashboard/DRE/PDF
-│       │   ├── empresas.js    # Dados da empresa
-│       │   ├── configuracoes.js
-│       │   └── admin.js       # API administrativa
-│       └── seeds/
-│           └── demo-data.js   # Dados de demonstração
-└── frontend/
-    ├── package.json
-    ├── .env.example
-    ├── index.html
-    ├── vite.config.js
-    ├── tailwind.config.js
-    └── src/
-        ├── main.jsx
-        ├── App.jsx
-        ├── index.css
-        ├── lib/
-        │   └── supabase.js
-        ├── services/
-        │   └── api.js
-        ├── contexts/
-        │   └── AuthContext.jsx
-        ├── components/
-        │   └── Layout.jsx
-        └── pages/
-            ├── Login.jsx
-            ├── Cadastro.jsx
-            ├── Dashboard.jsx
-            ├── Lancamentos.jsx
-            ├── Categorias.jsx
-            ├── Relatorios.jsx
-            ├── PontoEquilibrio.jsx
-            └── Configuracoes.jsx
-```
-
-## 🚀 Setup Rápido
-
-### 1. Configurar Supabase
-
-1. Acesse seu projeto no [Supabase](https://supabase.com)
-2. Vá em **SQL Editor**
-3. Cole e execute o conteúdo de `database/supabase-schema.sql`
-4. Copie as credenciais em **Settings > API**:
-   - Project URL
-   - anon/public key
-   - service_role key
-
-### 2. Configurar Backend
+Requisitos: Node 20.9+ (testado com Node 24).
 
 ```bash
-cd backend
-
-# Instalar dependências
 npm install
-
-# Configurar variáveis de ambiente
-cp .env.example .env
+npm run dev:local        # cria .env.local, sobe Postgres local (127.0.0.1:54329), migra, faz seed e abre http://localhost:3000
 ```
 
-Edite o arquivo `.env`:
-```env
-SUPABASE_URL=https://seu-projeto.supabase.co
-SUPABASE_ANON_KEY=sua-anon-key
-SUPABASE_SERVICE_ROLE_KEY=sua-service-role-key
-PORT=3001
-FRONTEND_URL=http://localhost:5173
+Logins locais (seed):
+
+| Pessoa | E-mail | Senha |
+|---|---|---|
+| Luiz (dono) | `luiz@familia.local` | `Luiz@Local2026` |
+| Esposa (membro) | `esposa@familia.local` | `Esposa@Local2026` |
+| Conta de outro app (sem acesso) | `outroapp@exemplo.local` | `OutroApp@2026xx` |
+
+Comandos úteis:
+
+| Comando | O que faz |
+|---|---|
+| `npm run db:local:start` / `db:local:stop` / `db:local:status` | Postgres local (dados em `.local/pgdata`, gitignored) |
+| `npm run db:local:migrate` | aplica shim local + migrations `fin_financeiro_` + stubs `invest_*` locais |
+| `npm run db:local:seed` / `db:local:reset` | dados de demonstração / recria tudo do zero |
+| `npm run setup:local` | gera `.env.local` com segredos aleatórios (não sobrescreve) |
+| `npm run typecheck` · `npm run lint` · `npm run build` | verificações |
+| `npm test` | 97 testes unitários (dinheiro, datas, faturas, boleto/Pix, PDF com senha, comandos, redirect…) |
+| `npm run test:rls` | 60 testes **reais** de RLS no Postgres local (porta 54330), conectando como `fin_financeiro_app` |
+| `npm run test:e2e` | 33 testes ponta a ponta locais (login, onboarding, cartões, revisão, Pluggy mock, WhatsApp…), como `fin_financeiro_app` |
+| `npm run screenshots` | fumaça no navegador (Playwright) + capturas em `docs/screenshots/` (requer `npm run build`; `npx playwright install chromium` uma vez) |
+| `npm run check` | typecheck + lint + todos os testes + build |
+
+## Deploy (Vercel + Supabase compartilhado)
+
+Resumo — detalhes e alertas em [docs/ENTREGA.md › Go-live](docs/ENTREGA.md#go-live-supabase--vercel):
+
+1. **Revise** os SQL de `supabase/migrations/` (8 arquivos; somente `fin_financeiro_*` + schema
+   `fin_financeiro_private`, aditivos; não tocam nas tabelas reservadas do app antigo
+   `fin_financeiro_categorias/_configuracoes/_empresas/_lancamentos/_usuarios`) e aplique no projeto
+   `bqbmvurwmsgitundbdxt` pelo SQL Editor (um arquivo por vez, em ordem) — é um **banco de produção
+   compartilhado** com outros apps.
+2. Crie o papel de conexão do app com `supabase/manual/fin_financeiro_app_role.sql` (troque a senha
+   placeholder na hora; não commite).
+3. Na Vercel, cadastre as variáveis de `.env.example` — `DATABASE_URL` com o papel
+   **`fin_financeiro_app`** no pooler em modo transaction (porta 6543); nunca `DATABASE_URL_ADMIN`
+   nem `LOCAL_DEV_AUTH`. `SUPABASE_SERVICE_ROLE_KEY` é opcional (só upload de PDF; bucket privado
+   `fin_financeiro_faturas`). Faça o deploy e confira os crons.
+4. O Luiz entra no painel e usa **"Criar minha família"**; depois convida a esposa em
+   Configurações › Família (alternativa: `npm run bootstrap` com `DATABASE_URL_ADMIN`).
+5. Configure os webhooks (WhatsApp/Evolution; Pluggy com header `x-webhook-secret`) e o OAuth do Google.
+   WhatsApp oficial (Meta Cloud API): `WHATSAPP_PROVIDER=meta` + `META_WHATSAPP_ACCESS_TOKEN`,
+   `META_WHATSAPP_PHONE_NUMBER_ID`, `META_WHATSAPP_APP_SECRET`, `META_WHATSAPP_VERIFY_TOKEN`
+   (opcional `META_GRAPH_API_VERSION`, padrão `v21.0`); webhook em `/api/whatsapp/webhook`, campo
+   `messages`. Só eventos do `phone_number_id` configurado são processados — ver `docs/ENTREGA.md` §5.
+
+## Segurança (resumo)
+
+- **RLS em todas as tabelas `fin_financeiro_`**, por pertencimento (`fin_financeiro_household_members`). O `auth.users`
+  é compartilhado com outros apps: **cadastro não concede nada**; vínculo só por convite, bootstrap
+  ou pelo onboarding explícito "Criar minha família" (cria a família DO usuário, sem acesso a outras).
+- O app conecta com o papel dedicado **`fin_financeiro_app` (NOINHERIT)**: sem `SET ROLE` ele não tem
+  privilégio. Cada requisição do painel roda como `authenticated` com o `sub` do usuário (o mesmo
+  mecanismo do PostgREST) → a RLS vale também no servidor. `service_role` (só DML) apenas em
+  crons/webhooks/log de mensagens (lista e limitações no ENTREGA.md).
+- RPCs chamadas pelo papel `anon` ficam no schema `fin_financeiro_private`, fora da API REST do Supabase.
+- Sessão em **cookies httpOnly** (`@supabase/ssr`), nada em `localStorage`.
+- Limite de tentativas de login (5 por e-mail / 20 por IP em 15 min), senha mínima de 12 caracteres.
+- Dinheiro em **centavos inteiros** de ponta a ponta; datas no fuso `America/Sao_Paulo`.
+  Pagamentos de fatura e transferências próprias ficam fora dos relatórios; estornos reduzem despesa.
+- Webhooks: Bearer (Evolution) / assinatura HMAC (Meta) / segredo (Pluggy) com comparação em tempo
+  constante — todos **falham fechados** se o segredo não estiver configurado. Crons exigem `CRON_SECRET`.
+- Segredos só no servidor; tokens OAuth e do WhatsApp cifrados (AES-256-GCM) no banco.
+- O código antigo (Express/Vite) foi removido; antes disso, o commit `fix(security)` corrigiu a
+  chave admin que liberava `/api/admin/*` sem login e as políticas `WITH CHECK (true)`.
+
+## Estrutura
+
 ```
-
-```bash
-# Criar dados de demonstração (opcional)
-npm run seed
-
-# Iniciar servidor
-npm run dev
+src/app/            páginas (pt-BR) e rotas de API (webhooks, cron, OAuth, documentos)
+src/lib/domain/     regras puras e testadas (dinheiro, datas, faturas, boleto, Pix, metas…)
+src/lib/services/   acesso a dados com RLS do usuário
+src/lib/whatsapp/   provedores (Evolution, Meta, simulador), webhook, comandos, alertas
+src/lib/pluggy/     cliente Pluggy, mock, importação por membro
+src/lib/gmail/      OAuth e sincronização de faturas
+supabase/migrations/   SQL aditivo (fin_financeiro_) para o Supabase
+supabase/local/        shim do Supabase e stubs invest_* SOMENTE locais
+scripts/            Postgres local, seed, bootstrap, import de bills, screenshots
+tests/              unit, rls, e2e
 ```
-
-### 3. Configurar Frontend
-
-```bash
-cd frontend
-
-# Instalar dependências
-npm install
-
-# Configurar variáveis de ambiente
-cp .env.example .env
-```
-
-Edite o arquivo `.env`:
-```env
-VITE_SUPABASE_URL=https://seu-projeto.supabase.co
-VITE_SUPABASE_ANON_KEY=sua-anon-key
-VITE_API_URL=http://localhost:3001/api
-```
-
-```bash
-# Iniciar frontend
-npm run dev
-```
-
-### 4. Acessar o Sistema
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
-
-**Conta de demonstração** (após rodar `npm run seed`):
-- Email: `demo@confeitariadoce.com.br`
-- Senha: `demo123456`
-
-## 🔐 Segurança (RLS)
-
-O sistema usa Row Level Security do Supabase para garantir isolamento total entre empresas:
-
-```sql
--- Exemplo: usuários só veem lançamentos da sua empresa
-CREATE POLICY "Usuarios podem ver lancamentos da sua empresa"
-    ON lancamentos FOR SELECT
-    USING (empresa_id = get_user_empresa_id());
-```
-
-A função `get_user_empresa_id()` retorna automaticamente o `empresa_id` do usuário logado.
-
-## 📱 Responsividade
-
-- **Mobile**: Menu bottom navigation, sidebar retrátil
-- **Tablet**: Layout adaptativo
-- **Desktop**: Sidebar fixa, mais informações visíveis
-
-## 🎨 Paleta de Cores
-
-| Uso | Cor | Hex |
-|-----|-----|-----|
-| Primária | Índigo | #6366f1 |
-| Positivo | Verde | #22c55e |
-| Negativo | Vermelho | #ef4444 |
-| Alerta | Âmbar | #f59e0b |
-
-## 📊 Cálculos Financeiros
-
-### DRE Simplificada
-```
-(+) Receita Total
-(-) Custos Variáveis
-(=) Margem de Contribuição
-(-) Custos Fixos
-(=) Resultado Final
-```
-
-### Ponto de Equilíbrio
-```
-Ponto de Equilíbrio = Custos Fixos / (Margem de Contribuição %)
-```
-
-### Margem de Contribuição
-```
-MC = Receita - Custos Variáveis
-MC% = (MC / Receita) × 100
-```
-
-## 🚀 Deploy
-
-### Frontend (Vercel)
-1. Conecte o repositório ao Vercel
-2. Configure as variáveis de ambiente
-3. Deploy automático!
-
-### Backend (Railway/Render/Heroku)
-1. Configure as variáveis de ambiente
-2. Comando de start: `npm start`
-
-## 📝 API Endpoints
-
-### Autenticação
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/api/auth/cadastro` | Cadastrar empresa + usuário |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Dados do usuário logado |
-
-### Lançamentos
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/lancamentos` | Listar (com filtros) |
-| POST | `/api/lancamentos` | Criar |
-| PUT | `/api/lancamentos/:id` | Atualizar |
-| DELETE | `/api/lancamentos/:id` | Excluir |
-
-### Categorias
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/categorias` | Listar |
-| POST | `/api/categorias` | Criar |
-| PUT | `/api/categorias/:id` | Atualizar |
-| DELETE | `/api/categorias/:id` | Excluir |
-
-### Relatórios
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/relatorios/dashboard` | Dados do dashboard |
-| GET | `/api/relatorios/dre` | DRE simplificada |
-| GET | `/api/relatorios/mensal` | Resultado por mês |
-| GET | `/api/relatorios/ponto-equilibrio` | Cálculo PE |
-| GET | `/api/relatorios/pdf` | Download PDF |
-
-### Admin (requer autenticação especial)
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/api/admin/empresas` | Listar todas empresas |
-| GET | `/api/admin/stats` | Estatísticas do sistema |
-
-## 🤝 Contribuição
-
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -m 'Adiciona nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Abra um Pull Request
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT.
-
----
-
-Desenvolvido com ❤️ para pequenos empreendedores brasileiros.
